@@ -1,0 +1,37 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Harness Desktop",
+  "version": "0.1.0",
+  "identifier": "com.deepseek.harness.desktop",
+  "build": {
+    "beforeBuildCommand": "node ../../scripts/ensure-desktop-sidecar.mjs",
+    "beforeDevCommand": "",
+    "devUrl": "http://localhost:5173",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Harness Desktop",
+        "width": 1180,
+        "height": 800,
+        "minWidth": 900,
+        "minHeight": 600,
+        "resizable": true,
+        "fullscreen": false
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src ipc: http://ipc.localhost"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["app"],
+    "resources": {
+      "resources/sidecar/dsh-desktop-runtime": "sidecar/dsh-desktop-runtime",
+      "resources/runtime/cordis.yml": "runtime/cordis.yml"
+    },
+    "icon": ["icons/icon.icns"]
+  }
+}

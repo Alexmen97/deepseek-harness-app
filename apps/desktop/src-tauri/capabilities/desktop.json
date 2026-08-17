@@ -1,0 +1,11 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "desktop-capability",
+  "description": "Minimal host surface for the Harness Desktop WebView: the app's own IPC commands, events, and standard window behavior. No shell, fs, or exec plugin permissions exist.",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "core:event:default",
+    "core:window:default"
+  ]
+}
