@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>About Harness Desktop</title>
+    <style>
+      body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; margin: 0; padding: 28px 24px; color: #181a20; background: #f6f6f8; }
+      h1 { font-size: 17px; margin: 12px 0 2px; }
+      .subtitle { color: #5a606b; font-size: 12px; margin: 0 0 18px; }
+      table { width: 100%; border-collapse: collapse; font-size: 12px; }
+      td { padding: 4px 0; vertical-align: top; }
+      td:first-child { color: #5a606b; width: 42%; }
+      .links { margin-top: 18px; display: flex; flex-direction: column; gap: 6px; }
+      button { text-align: left; border: none; background: none; color: #2f6fed; cursor: pointer; padding: 0; font-size: 12px; }
+      .disclaimer { margin-top: 18px; font-size: 11px; color: #5a606b; }
+    </style>
+  </head>
+  <body>
+    <h1>Harness Desktop</h1>
+    <p class="subtitle">Unofficial desktop client based on DeepSeek Harness.</p>
+    <table>
+      <tr><td>Desktop version</td><td id="desktop-version">…</td></tr>
+      <tr><td>Harness Engine version</td><td id="harness-version">…</td></tr>
+      <tr><td>Desktop protocol version</td><td id="protocol-version">…</td></tr>
+      <tr><td>Architecture</td><td id="architecture">…</td></tr>
+      <tr><td>Build</td><td id="git">…</td></tr>
+    </table>
+    <div class="links">
+      <button id="repository">DeepSeek Harness Repository</button>
+      <button id="licenses">Open Source Licenses</button>
+    </div>
+    <p class="disclaimer">This desktop application is not an official DeepSeek product and does not imply DeepSeek endorsement.</p>
+    <script type="module" src="/about.js"></script>
+  </body>
+</html>
