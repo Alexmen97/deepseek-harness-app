@@ -16,7 +16,7 @@ export default defineConfig({
   root: src('.'),
   clearScreen: false,
   build: {
-    sourcemap: true,
+    sourcemap: false,
     outDir: src('./dist'),
     emptyOutDir: true,
   },

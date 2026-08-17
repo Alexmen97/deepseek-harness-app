@@ -10,6 +10,7 @@ import { AppWebEntry } from '@deepseek-ai/dsh-client-web'
 import { DesktopOverlay } from '@deepseek-ai/dsh-desktop-client/src/ui/overlay'
 import { installTauriBindings, requestRuntimeStart } from './tauri-bindings'
 import { DESKTOP_ENTRY_IDS, DESKTOP_STATICS } from './desktop-modules'
+import { assertNoJsExpr } from './boot-guard'
 
 const ROOT_ID = 'root'
 const OVERLAY_ID = 'desktop-overlay'
@@ -69,6 +70,7 @@ installTauriBindings()
     immediately: true,
   })),
 }
+assertNoJsExpr((globalThis as unknown as { __DSH_BOOT__: unknown }).__DSH_BOOT__)
 
 // The shell kernel fetches nothing: every plugin resolves through the static
 // module table via the bundle-load seam.

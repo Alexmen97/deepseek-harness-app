@@ -75,3 +75,9 @@ DEEPSEEK_API_KEY into the sidecar environment. The packaged runtime
 composition never falls back to the environment layer, stderr capture
 redacts credential-shaped values, and the runtime integration suite pins
 that no credential-shaped value reaches stdout or stderr.
+
+The desktop settings modal owns the user-facing credential surface: status,
+replace (new key typed, sent straight to the Keychain, cleared), remove with
+confirmation, and a separate Base URL preference that never enters the
+Keychain. The first Keychain access triggers the standard macOS
+authorization prompt once.

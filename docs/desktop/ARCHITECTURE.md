@@ -159,6 +159,15 @@ and the bounded restart policy, the macOS Keychain bridge, first-run
 onboarding with the native workspace picker, and the desktop test layers
 described in `docs/desktop/M1B-TESTING.md`.
 
+M2 ships the distribution and desktop UX pass: the CSP eval audit with the
+manifest guard, navigation and rendered-content hardening, the
+syncInspectManifest ordering fix, the English-fallback locale policy with an
+Italian desktop surface, the System/Light/Dark appearance integration, the
+native menu and shortcuts, macOS notifications, the native attachment
+picker, the credential management surface, the About window, the
+hardened-runtime signing pipeline with notarization and DMG tooling, and the
+release verification script (`docs/desktop/DISTRIBUTION.md`).
+
 ## Current constraints
 
 One runtime process serves one workspace: switching workspace restarts the

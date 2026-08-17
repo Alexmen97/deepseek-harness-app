@@ -15,7 +15,7 @@ import type { LaunchedRuntime } from './launch.ts'
 import { launchRuntime } from './launch.ts'
 
 const REPO_ROOT = process.cwd()
-const EXE = resolve(REPO_ROOT, 'dist-exe', 'dsh-desktop-runtime-macos-arm64')
+const EXE = process.env.DSH_DESKTOP_RUNTIME_EXE ?? resolve(REPO_ROOT, 'dist-exe', 'dsh-desktop-runtime-macos-arm64')
 const exists = existsSync(EXE)
 
 /** Spawn the packaged runtime with a node-free PATH. */

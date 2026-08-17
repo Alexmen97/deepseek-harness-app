@@ -1,7 +1,8 @@
 /**
- * Generate the M1B placeholder app icon: a solid rounded-square mark with an
- * H, encoded as a minimal PNG and assembled into icon.icns with sips +
- * iconutil. Explicitly unofficial branding; replace before any distribution.
+ * Generate the Harness Desktop app icon: a squircle tile with a blue-violet
+ * gradient and a white harness mark (two rails joined by a diagonal strap).
+ * Original geometry, no third-party artwork. Encoded as a minimal PNG and
+ * assembled into icon.icns with sips + iconutil.
  */
 
 import { execFileSync } from 'node:child_process'
@@ -44,10 +45,11 @@ function png(size, pixel) {
     raw[y * stride] = 0
     for (let x = 0; x < size; x += 1) {
       const offset = y * stride + 1 + x * 4
-      raw[offset] = pixel[0]
-      raw[offset + 1] = pixel[1]
-      raw[offset + 2] = pixel[2]
-      raw[offset + 3] = pixel[3]
+      const [r, g, b, a] = pixel(x, y)
+      raw[offset] = r
+      raw[offset + 1] = g
+      raw[offset + 2] = b
+      raw[offset + 3] = a
     }
   }
   const ihdr = Buffer.alloc(13)
@@ -63,9 +65,63 @@ function png(size, pixel) {
   ])
 }
 
+const clamp01 = (value) => Math.max(0, Math.min(1, value))
+const lerp = (a, b, t) => a + (b - a) * t
+
+function smoothstep(edge0, edge1, value) {
+  const t = clamp01((value - edge0) / (edge1 - edge0))
+  return t * t * (3 - 2 * t)
+}
+
+function sdRoundRect(px, py, cx, cy, hw, hh, r) {
+  const qx = Math.abs(px - cx) - hw + r
+  const qy = Math.abs(py - cy) - hh + r
+  return Math.hypot(Math.max(qx, 0), Math.max(qy, 0)) + Math.min(Math.max(qx, qy), 0) - r
+}
+
+function sdSegment(px, py, ax, ay, bx, by) {
+  const pax = px - ax
+  const pay = py - ay
+  const bax = bx - ax
+  const bay = by - ay
+  const t = clamp01((pax * bax + pay * bay) / (bax * bax + bay * bay))
+  return Math.hypot(pax - bax * t, pay - bay * t)
+}
+
+/** The icon art: squircle tile, diagonal gradient, white harness mark. */
+function iconPixel(size) {
+  const half = size / 2
+  const bgRadius = size * 0.228
+  const barHalfWidth = size * 0.052
+  const barHalfHeight = size * 0.205
+  const barRadius = size * 0.048
+  const strapHalf = size * 0.042
+  const leftX = size * 0.365
+  const rightX = size * 0.635
+  const midY = size * 0.5
+  return (x, y) => {
+    const tile = sdRoundRect(x, y, half, half, half - 1.5, half - 1.5, bgRadius)
+    const tileAlpha = smoothstep(1, 0, tile)
+    if (tileAlpha <= 0) return [0, 0, 0, 0]
+    const t = clamp01((x + y) / (2 * size))
+    const top = [31, 79, 216]
+    const bottom = [109, 59, 216]
+    const base = [lerp(top[0], bottom[0], t), lerp(top[1], bottom[1], t), lerp(top[2], bottom[2], t)]
+    const leftBar = sdRoundRect(x, y, leftX, midY, barHalfWidth, barHalfHeight, barRadius)
+    const rightBar = sdRoundRect(x, y, rightX, midY, barHalfWidth, barHalfHeight, barRadius)
+    const strap = sdSegment(x, y, leftX, midY + size * 0.10, rightX, midY - size * 0.10) - strapHalf
+    const glyph = Math.min(leftBar, rightBar, strap)
+    const glyphAlpha = smoothstep(1, 0, glyph)
+    const r = Math.round(lerp(base[0], 255, glyphAlpha))
+    const g = Math.round(lerp(base[1], 255, glyphAlpha))
+    const b = Math.round(lerp(base[2], 255, glyphAlpha))
+    return [r, g, b, Math.round(tileAlpha * 255)]
+  }
+}
+
 mkdirSync(iconset, { recursive: true })
 const icon = resolve(iconset, 'icon.png')
-writeFileSync(icon, png(1024, [47, 111, 237, 255]))
+writeFileSync(icon, png(1024, iconPixel(1024)))
 const work = resolve(iconset, 'icon.iconset')
 rmSync(work, { recursive: true, force: true })
 mkdirSync(work, { recursive: true })
