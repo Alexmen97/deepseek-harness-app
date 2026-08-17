@@ -27,6 +27,7 @@ tmp/
 mise.toml
 dist-exe/
 apps/desktop/src-tauri/resources/sidecar/
+apps/desktop/src-tauri/resources/runtime/
 apps/desktop/src-tauri/icons/icon.iconset/
 apps/desktop/src-tauri/icons/icon.png
 apps/desktop/src-tauri/target/
