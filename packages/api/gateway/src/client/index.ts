@@ -22,6 +22,12 @@ interface MountToken {
   readonly abort: AbortController
 }
 
+/** One descriptor's pending mount: the descriptor plus its abortable token. */
+interface PendingMount {
+  readonly descriptor: InvocationDescriptor
+  readonly token: MountToken
+}
+
 interface ScopedProjection {
   readonly context: string
   readonly wire: string
@@ -177,10 +183,35 @@ class ClientRemoteService extends Service implements TypertClientRemote {
   ): Promise<TypertDisposer> {
     this.validateContribution(contribution)
     const disposeRemote = callerCtx.typert.remotes.register(contribution)
+    const pending: PendingMount[] = contribution.descriptors.map(descriptor => ({
+      descriptor,
+      token: { active: true, abort: new AbortController() },
+    }))
+    const byNamespace = new Map<string, PendingMount[]>()
+    for (const item of pending) {
+      const list = byNamespace.get(item.descriptor.namespace)
+      if (list === undefined) byNamespace.set(item.descriptor.namespace, [item])
+      else list.push(item)
+    }
     const installed: TypertDisposer[] = []
     try {
-      for (const descriptor of contribution.descriptors) installed.push(await this.install(descriptor))
+      for (const [name, items] of byNamespace) installed.push(await this.installNamespace(name, items))
     } catch (error) {
+      for (const item of pending) {
+        item.token.active = false
+        item.token.abort.abort()
+        const namespace = this.namespaces.get(item.descriptor.namespace)
+        if (namespace !== undefined) {
+          if (item.descriptor.invocation.kind === 'direct') {
+            namespace.service.remove('direct', item.descriptor.method, item.token)
+          }
+          const projection = scopedProjection(item.descriptor)
+          if (projection !== undefined) {
+            namespace.service.remove('scoped', item.descriptor.method, item.token)
+          }
+          await this.disposeNamespace(item.descriptor.namespace, namespace)
+        }
+      }
       for (const dispose of installed.reverse()) await dispose()
       await disposeRemote()
       throw error
@@ -235,65 +266,37 @@ class ClientRemoteService extends Service implements TypertClientRemote {
     }
   }
 
-  private async install(descriptor: InvocationDescriptor): Promise<TypertDisposer> {
-    const token: MountToken = { active: true, abort: new AbortController() }
-    const installed: TypertDisposer[] = []
-    try {
-      if (descriptor.invocation.kind === 'direct') {
-        installed.push(await this.installDirect(descriptor, token))
+  /**
+   * Install one namespace's pending batch and return its disposer. The first
+   * batch installs inside the namespace service's own apply, so an injector
+   * of remote.<namespace> always sees the mounted methods; later batches
+   * install on the live service.
+   */
+  private async installNamespace(name: string, items: PendingMount[]): Promise<TypertDisposer> {
+    const namespace = await this.namespace(name, items)
+    return async () => {
+      for (const item of items) {
+        if (!item.token.active) continue
+        item.token.active = false
+        item.token.abort.abort()
+        if (item.descriptor.invocation.kind === 'direct') {
+          namespace.service.remove('direct', item.descriptor.method, item.token)
+        }
+        const projection = scopedProjection(item.descriptor)
+        if (projection !== undefined) {
+          namespace.service.remove('scoped', item.descriptor.method, item.token)
+        }
       }
-      const projection = scopedProjection(descriptor)
-      if (projection !== undefined) installed.push(await this.installScoped(descriptor, projection, token))
-    } catch (error) {
-      token.active = false
-      token.abort.abort()
-      for (const dispose of installed.reverse()) await dispose()
-      throw error
-    }
-    return async () => {
-      /* v8 ignore next -- Cordis effect disposers are idempotent and invoke this cleanup at most once. */
-      if (!token.active) return
-      token.active = false
-      token.abort.abort()
-      for (const dispose of installed.reverse()) await dispose()
+      await this.disposeNamespace(name, namespace)
     }
   }
 
-  private async installDirect(descriptor: InvocationDescriptor, token: MountToken): Promise<TypertDisposer> {
-    const namespace = await this.namespace(descriptor.namespace)
-    try {
-      namespace.service.installDirect(descriptor, token)
-    } catch (error) {
-      await this.disposeNamespace(descriptor.namespace, namespace)
-      throw error
-    }
-    return async () => {
-      namespace.service.remove('direct', descriptor.method, token)
-      await this.disposeNamespace(descriptor.namespace, namespace)
-    }
-  }
-
-  private async installScoped(
-    descriptor: InvocationDescriptor,
-    projection: ScopedProjection,
-    token: MountToken,
-  ): Promise<TypertDisposer> {
-    const namespace = await this.namespace(descriptor.namespace)
-    try {
-      namespace.service.installScoped(descriptor, projection, token)
-    } catch (error) {
-      await this.disposeNamespace(descriptor.namespace, namespace)
-      throw error
-    }
-    return async () => {
-      namespace.service.remove('scoped', descriptor.method, token)
-      await this.disposeNamespace(descriptor.namespace, namespace)
-    }
-  }
-
-  private async namespace(name: string): Promise<RemoteNamespaceHandle> {
+  private async namespace(name: string, items: PendingMount[]): Promise<RemoteNamespaceHandle> {
     let namespace = this.namespaces.get(name)
-    if (namespace !== undefined) return namespace
+    if (namespace !== undefined) {
+      for (const item of items) this.installInto(namespace.service, item)
+      return namespace
+    }
     let service: RemoteNamespaceService | undefined
     const fiber = this.ownerCtx.plugin({
       name: remoteServiceKey(name),
@@ -303,6 +306,9 @@ class ClientRemoteService extends Service implements TypertClientRemote {
           name,
           (direct, scoped, caller, args) => this.invokeMethod(direct, scoped, caller, args),
         )
+        // Install the whole first batch before this apply resolves: the
+        // namespace becomes visible to injectors with its methods mounted.
+        for (const item of items) this.installInto(service, item)
       },
     })
     try {
@@ -316,6 +322,13 @@ class ClientRemoteService extends Service implements TypertClientRemote {
     namespace = { service, dispose: fiber.dispose }
     this.namespaces.set(name, namespace)
     return namespace
+  }
+
+  private installInto(service: RemoteNamespaceService, item: PendingMount): void {
+    const { descriptor, token } = item
+    if (descriptor.invocation.kind === 'direct') service.installDirect(descriptor, token)
+    const projection = scopedProjection(descriptor)
+    if (projection !== undefined) service.installScoped(descriptor, projection, token)
   }
 
   private async disposeNamespace(name: string, namespace: RemoteNamespaceHandle): Promise<void> {

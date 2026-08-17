@@ -234,6 +234,33 @@ describe('Client Typert API', () => {
     disposeBusinessProbe()
   })
 
+  it('installs a namespace batch before the namespace service becomes visible', async () => {
+    // Regression for the desktop boot race: a consumer that injects a remote
+    // namespace must see the mounted methods the moment the service resolves,
+    // not after the mounting plugin's apply continues.
+    const call = vi.fn<ConnectionHandle['rpc']['call']>()
+      .mockResolvedValue({ ok: true, value: { ref: 'probe-1' } })
+    const ctx = await bench(call)
+    let observed: unknown = 'unsettled'
+    const probe = ctx.plugin({
+      inject: ['remote.remote.dynamicCordisRunner'],
+      apply: (scope: Context) => {
+        const namespace = scope.get('remote.remote.dynamicCordisRunner') as { syncInspectManifest?: unknown }
+        observed = namespace.syncInspectManifest
+      },
+    })
+    const descriptor = {
+      ...directDescriptor(),
+      namespace: 'remote.dynamicCordisRunner',
+      method: 'syncInspectManifest',
+    }
+    const mounting = ctx.remote.$mount({ package: '@fixture/dynamic', descriptors: [descriptor] })
+    await Promise.all([probe, mounting])
+    expect(typeof observed).toBe('function')
+    await probe.dispose()
+    await (await mounting)()
+  })
+
   it('encodes declared undefined as an omitted argument and distinguishes it from null results', async () => {
     const call = vi.fn<ConnectionHandle['rpc']['call']>()
       .mockResolvedValueOnce({ ok: true, value: undefined })
