@@ -9,6 +9,10 @@ use tauri::{Manager, State};
 
 use crate::manager::{self, RuntimeManager, RuntimeState};
 
+/// Upstream attachment-local defaults mirrored by the native picker
+/// (packages/attachment/attachment-local/src/index.ts).
+const ATTACHMENT_MAX_IMAGE_BYTES: usize = 5 * 1024 * 1024;
+
 /// Serialize the current lifecycle state and generation.
 #[derive(serde::Serialize)]
 pub struct RuntimeStatus {
@@ -54,6 +58,19 @@ pub fn rpc_request(
     manager.request(request_id, generation, method, rpc_id, payload)
 }
 
+/// Append one desktop log line (the same bounded store as runtime stderr).
+#[tauri::command]
+pub fn log_line(app: tauri::AppHandle, line: String) -> Result<(), String> {
+    use std::io::Write;
+    let dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|error| error.to_string())?
+        .join("logs");
+    let mut file = manager::open_log(&dir).map_err(|error| error.to_string())?;
+    writeln!(file, "{line}").map_err(|error| error.to_string())
+}
+
 /// Native macOS directory picker; cancellation answers null, never an error.
 #[tauri::command]
 pub fn pick_workspace() -> Result<Option<String>, String> {
@@ -61,6 +78,57 @@ pub fn pick_workspace() -> Result<Option<String>, String> {
         .set_title("Choose a project folder")
         .pick_folder();
     Ok(picked.map(|path| path.to_string_lossy().to_string()))
+}
+
+/// One user-selected image: the content of the explicitly chosen resource.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PickedAttachment {
+    pub name: String,
+    pub media_type: String,
+    pub data: String,
+}
+
+/// Native image picker for the composer attachment flow. Returns the bytes
+/// of the explicitly selected files only — there is no general filesystem
+/// read command on the desktop surface.
+#[tauri::command]
+pub fn pick_attachments() -> Result<Vec<PickedAttachment>, String> {
+    let picked = rfd::FileDialog::new()
+        .set_title("Choose images to attach")
+        .add_filter("Images", &["png", "jpg", "jpeg", "webp", "gif"])
+        .pick_files();
+    let Some(paths) = picked else { return Ok(Vec::new()) };
+    let mut attachments = Vec::new();
+    for path in paths {
+        let extension = path
+            .extension()
+            .and_then(|value| value.to_str())
+            .unwrap_or("")
+            .to_lowercase();
+        let media_type = match extension.as_str() {
+            "png" => "image/png",
+            "jpg" | "jpeg" => "image/jpeg",
+            "webp" => "image/webp",
+            "gif" => "image/gif",
+            _ => return Err(format!("unsupported image type: {}", path.display())),
+        };
+        let bytes = std::fs::read(&path)
+            .map_err(|error| format!("cannot read {}: {error}", path.display()))?;
+        if bytes.len() > ATTACHMENT_MAX_IMAGE_BYTES {
+            return Err(format!("{} exceeds the 5 MiB image limit", path.display()));
+        }
+        use base64::Engine as _;
+        attachments.push(PickedAttachment {
+            name: path
+                .file_name()
+                .map(|name| name.to_string_lossy().to_string())
+                .unwrap_or_else(|| "image".to_string()),
+            media_type: media_type.to_string(),
+            data: base64::engine::general_purpose::STANDARD.encode(&bytes),
+        });
+    }
+    Ok(attachments)
 }
 
 /// Configured state of one credential reference; never the value.
@@ -142,8 +210,75 @@ pub fn prefs_set(app: tauri::AppHandle, key: String, value: String) -> Result<()
 
 /// Redacted diagnostics summary (no environment dump, no secrets).
 #[tauri::command]
-pub fn diagnostics(manager: State<'_, RuntimeManager>) -> String {
-    manager::diagnostics_summary(&manager)
+pub fn diagnostics(manager: State<'_, RuntimeManager>, app: tauri::AppHandle) -> String {
+    manager::diagnostics_summary(&manager, &app)
+}
+
+/// Rebuild the native menu with the resolved desktop language (en/it).
+#[tauri::command]
+pub fn menu_set_language(app: tauri::AppHandle, language: String) -> Result<(), String> {
+    if language != "en" && language != "it" {
+        return Err(format!("unsupported menu language {language:?}"));
+    }
+    let menu = crate::menu::build_menu(&app, &language).map_err(|error| error.to_string())?;
+    app.set_menu(menu).map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+/// Versions and identity for the About window (single source of truth).
+#[derive(serde::Serialize)]
+pub struct AboutInfo {
+    pub desktop_version: String,
+    pub harness_version: String,
+    pub protocol_version: u32,
+    pub architecture: String,
+    pub git: Option<String>,
+}
+
+#[tauri::command]
+pub fn about_info() -> AboutInfo {
+    AboutInfo {
+        desktop_version: env!("CARGO_PKG_VERSION").to_string(),
+        harness_version: manager::HARNESS_VERSION.to_string(),
+        protocol_version: manager::DESKTOP_PROTOCOL_VERSION,
+        architecture: std::env::consts::ARCH.to_string(),
+        git: option_env!("DSH_DESKTOP_GIT").map(String::from),
+    }
+}
+
+/// Open (or focus) the About window, with the same navigation policy as the main window.
+pub fn open_about_window<R: tauri::Runtime>(app: tauri::AppHandle<R>) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window("about") {
+        let _ = window.set_focus();
+        return Ok(());
+    }
+    let development = cfg!(dev);
+    tauri::WebviewWindowBuilder::new(&app, "about", tauri::WebviewUrl::App("about.html".into()))
+        .title("About Harness Desktop")
+        .inner_size(400.0, 470.0)
+        .resizable(false)
+        .minimizable(false)
+        .maximizable(false)
+        .background_color(tauri::window::Color(246, 246, 248, 255))
+        .on_navigation(move |url| {
+            match crate::navigation::navigation_action(url, development) {
+                crate::navigation::NavigationAction::Allow => true,
+                crate::navigation::NavigationAction::OpenExternally => {
+                    let _ = open_in_system(url.as_str());
+                    false
+                }
+                crate::navigation::NavigationAction::Deny => false,
+            }
+        })
+        .on_new_window(move |url, _features| {
+            if crate::navigation::navigation_action(&url, development) == crate::navigation::NavigationAction::OpenExternally {
+                let _ = open_in_system(url.as_str());
+            }
+            tauri::webview::NewWindowResponse::Deny
+        })
+        .build()
+        .map_err(|error| error.to_string())?;
+    Ok(())
 }
 
 fn prefs_path(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
@@ -156,7 +291,7 @@ fn prefs_path(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
 }
 
 /// Hand a path or URL to the system default opener (host capability only).
-fn open_in_system(target: &str) -> Result<(), String> {
+pub(crate) fn open_in_system(target: &str) -> Result<(), String> {
     let path = std::path::Path::new(target);
     if path.exists() || target.starts_with("http://") || target.starts_with("https://") {
         let status = std::process::Command::new("open")

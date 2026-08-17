@@ -71,6 +71,14 @@ export interface DesktopHost {
   stopRuntime(): Promise<void>
   /** Render a redacted diagnostics summary. */
   diagnostics(): Promise<Record<string, string>>
+  /** Rebuild the native menu with the resolved desktop language (en/it). */
+  setMenuLanguage(language: string): Promise<void>
+  /** Show one native notification (privacy-minimal copy). */
+  notify(kind: string, title: string, body: string): Promise<void>
+  /** Subscribe to window focus changes; the listener receives focused (true/false). */
+  subscribeFocus(listener: (focused: boolean) => void): () => void
+  /** One user-selected image returned by the native attachment picker. */
+  pickAttachments(): Promise<Array<{ name: string; mediaType: string; data: string }>>
 }
 
 /** The installed production/test bindings; apps/desktop installs the Tauri bindings before boot. */

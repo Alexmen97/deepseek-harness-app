@@ -125,6 +125,16 @@
 - id: settings
   name: '@deepseek-ai/dsh-settings-file'
 
+# The locale settings section the browser client persists its preference in.
+- id: client-locale
+  name: '@deepseek-ai/dsh-client-locale'
+
+- id: ui-settings-general
+  name: '@deepseek-ai/dsh-client-ui-settings-general'
+
+- id: ui-theme
+  name: '@deepseek-ai/dsh-client-ui-theme'
+
 - id: credentials
   name: '@deepseek-ai/dsh-credentials-keychain'
 

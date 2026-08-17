@@ -49,7 +49,9 @@ import {
   sessionCreateRequestSchema,
   sessionHistoryRequestSchema,
   sessionListRequestSchema,
+  sessionModelsRequestSchema,
   sessionPromptRequestSchema,
+  sessionSelectModelRequestSchema,
 } from '@deepseek-ai/dsh-host-apiproxy/api/sessions.schema'
 import {
   workspaceCreateRequestSchema,
@@ -59,6 +61,12 @@ import {
   llmModelsRequestSchema,
   llmProvidersRequestSchema,
 } from '@deepseek-ai/dsh-host-apiproxy/api/llm.schema'
+import {
+  settingsDescribeRequestSchema,
+  settingsMutateRequestSchema,
+  settingsReplaceRequestSchema,
+  settingsUpdateRequestSchema,
+} from '@deepseek-ai/dsh-host-apiproxy/api/settings.schema'
 import * as LlmDeepSeek from '@deepseek-ai/dsh-llm-deepseek'
 import type {} from '@deepseek-ai/dsh-user-approval'
 import type {} from '@deepseek-ai/dsh-user-questions'
@@ -127,12 +135,18 @@ type ServedMethod =
   | 'session.list'
   | 'session.create'
   | 'session.history'
+  | 'session.models'
   | 'session.prompt'
+  | 'session.selectModel'
   | 'session.cancel'
   | 'workspace.list'
   | 'workspace.create'
   | 'llm.providers'
   | 'llm.models'
+  | 'settings.describe'
+  | 'settings.update'
+  | 'settings.replace'
+  | 'settings.mutate'
 
 /**
  * One served apiproxy route: the same payload schema the web fetch carrier
@@ -168,6 +182,14 @@ const SERVED_ROUTES: { [K in ServedMethod]: ServedRoute<K> } = {
     schema: sessionPromptRequestSchema,
     invoke: (api, rpcId, payload) => api.sessions.prompt({ rpcId, payload }),
   },
+  'session.models': {
+    schema: sessionModelsRequestSchema,
+    invoke: (api, rpcId, payload) => api.sessions.models({ rpcId, payload }),
+  },
+  'session.selectModel': {
+    schema: sessionSelectModelRequestSchema,
+    invoke: (api, rpcId, payload) => api.sessions.selectModel({ rpcId, payload }),
+  },
   'session.cancel': {
     schema: sessionCancelRequestSchema,
     invoke: (api, rpcId, payload) => api.sessions.cancel({ rpcId, payload }),
@@ -187,6 +209,22 @@ const SERVED_ROUTES: { [K in ServedMethod]: ServedRoute<K> } = {
   'llm.models': {
     schema: llmModelsRequestSchema,
     invoke: (api, rpcId, payload) => api.llm.models({ rpcId, payload }),
+  },
+  'settings.describe': {
+    schema: settingsDescribeRequestSchema,
+    invoke: (api, rpcId, payload) => api.settings.describe({ rpcId, payload }),
+  },
+  'settings.update': {
+    schema: settingsUpdateRequestSchema,
+    invoke: (api, rpcId, payload) => api.settings.update({ rpcId, payload }),
+  },
+  'settings.replace': {
+    schema: settingsReplaceRequestSchema,
+    invoke: (api, rpcId, payload) => api.settings.replace({ rpcId, payload }),
+  },
+  'settings.mutate': {
+    schema: settingsMutateRequestSchema,
+    invoke: (api, rpcId, payload) => api.settings.mutate({ rpcId, payload }),
   },
 }
 

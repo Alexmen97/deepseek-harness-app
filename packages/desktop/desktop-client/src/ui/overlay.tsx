@@ -9,6 +9,9 @@
 import { useEffect, useState } from 'react'
 import type { CSSProperties, ReactElement } from 'react'
 import { desktopBindings, type DesktopRuntimeLifecycle } from '../transport.ts'
+import { desktopLocale } from '../locale.ts'
+import { desktopPalette, useDesktopAppearance, useDesktopStrings } from './strings.ts'
+import { DesktopSettingsModal } from './settings-modal.tsx'
 
 const CREDENTIAL_REF = 'DEEPSEEK_API_KEY'
 
@@ -16,6 +19,9 @@ const CREDENTIAL_REF = 'DEEPSEEK_API_KEY'
 export function DesktopOverlay(): ReactElement {
   const host = desktopBindings().host
   const transport = desktopBindings().transport
+  const { t } = useDesktopStrings()
+  const appearance = useDesktopAppearance()
+  const palette = desktopPalette(appearance)
   const [step, setStep] = useState(0)
   const [loading, setLoading] = useState(true)
   const [workspace, setWorkspace] = useState<string | undefined>(undefined)
@@ -25,12 +31,15 @@ export function DesktopOverlay(): ReactElement {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | undefined>(undefined)
   const [lifecycle, setLifecycle] = useState<DesktopRuntimeLifecycle>({ state: 'stopped', generation: 0 })
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [notice, setNotice] = useState<string | undefined>(undefined)
 
   useEffect(() => {
+    void desktopLocale.init().then(() => { void host.setMenuLanguage(desktopLocale.get()) })
     let active = true
     void Promise.all([host.prefsGet('workspace'), host.credentialStatus(CREDENTIAL_REF)]).then(([savedWorkspace, credential]) => {
       if (!active) return
-      setWorkspace(savedWorkspace)
+      setWorkspace(savedWorkspace ?? undefined)
       setCredentialConfigured(credential.configured)
       setLoading(false)
     }, (failure: unknown) => {
@@ -43,13 +52,28 @@ export function DesktopOverlay(): ReactElement {
 
   useEffect(() => transport.subscribeState((next) => { setLifecycle(next) }), [transport])
 
+  useEffect(() => {
+    const openSettings = (): void => { setSettingsOpen(true) }
+    window.addEventListener('desktop:menu-settings', openSettings)
+    const showNotice = (event: Event): void => {
+      const detail = (event as CustomEvent<string>).detail
+      setNotice(detail)
+      setTimeout(() => { setNotice(undefined) }, 6000)
+    }
+    window.addEventListener('desktop:notice', showNotice)
+    return () => {
+      window.removeEventListener('desktop:menu-settings', openSettings)
+      window.removeEventListener('desktop:notice', showNotice)
+    }
+  }, [])
+
   const needsOnboarding = !loading && (workspace === undefined || !credentialConfigured)
 
   const saveCredential = async (): Promise<void> => {
     setBusy(true)
     setError(undefined)
     try {
-      if (apiKey.trim() === '') throw new Error('API key must not be empty')
+      if (apiKey.trim() === '') throw new Error(t('error.credentialEmpty'))
       await host.credentialSet(CREDENTIAL_REF, apiKey.trim())
       if (baseUrl.trim() !== '') await host.prefsSet('deepseekBaseUrl', baseUrl.trim())
       setCredentialConfigured(true)
@@ -91,37 +115,41 @@ export function DesktopOverlay(): ReactElement {
     border: '1px solid #d0d4dc', fontSize: '0.95rem', marginBottom: '0.9rem',
   }
 
+  if (settingsOpen) {
+    return <DesktopSettingsModal open onClose={() => { setSettingsOpen(false) }} />
+  }
+
   if (needsOnboarding) {
     return (
       <div style={{ position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(20,22,28,0.45)', zIndex: 1000 }}>
-        <div style={{ width: 420, background: '#fff', color: '#181a20', borderRadius: 14, padding: '2rem', boxShadow: '0 18px 60px rgba(0,0,0,0.28)' }}>
+        <div style={{ width: 420, background: palette.dialog, color: palette.text, borderRadius: 14, padding: '2rem', boxShadow: '0 18px 60px rgba(0,0,0,0.28)' }}>
           {step === 0 && (
             <section>
-              <h1 style={{ marginTop: 0, fontSize: '1.35rem' }}>Welcome to Harness Desktop</h1>
-              <p style={{ color: '#4a4f59', lineHeight: 1.5 }}>AI coding powered by DeepSeek Harness. Unofficial desktop client.</p>
-              <button style={button} onClick={() => { setStep(1) }}>Continue</button>
+              <h1 style={{ marginTop: 0, fontSize: '1.35rem' }}>{t('onboarding.welcome.title')}</h1>
+              <p style={{ color: palette.muted, lineHeight: 1.5 }}>{t('onboarding.welcome.body')}</p>
+              <button style={button} onClick={() => { setStep(1) }}>{t('onboarding.welcome.continue')}</button>
             </section>
           )}
           {step === 1 && (
             <section>
-              <h2 style={{ marginTop: 0, fontSize: '1.2rem' }}>Connect DeepSeek</h2>
-              <label style={label} htmlFor="desktop-api-key">API Key</label>
-              <input id="desktop-api-key" style={input} type="password" autoComplete="off" value={apiKey} onChange={(event) => { setApiKey(event.target.value) }} placeholder="sk-..." />
-              <label style={label} htmlFor="desktop-base-url">Base URL (optional)</label>
-              <input id="desktop-base-url" style={input} type="text" value={baseUrl} onChange={(event) => { setBaseUrl(event.target.value) }} placeholder="https://api.deepseek.com" />
+              <h2 style={{ marginTop: 0, fontSize: '1.2rem' }}>{t('onboarding.provider.title')}</h2>
+              <label style={label} htmlFor="desktop-api-key">{t('onboarding.provider.apiKey')}</label>
+              <input id="desktop-api-key" style={{ ...input, background: palette.input, borderColor: palette.inputBorder, color: palette.text }} type="password" autoComplete="off" value={apiKey} onChange={(event) => { setApiKey(event.target.value) }} placeholder="sk-..." />
+              <label style={label} htmlFor="desktop-base-url">{t('onboarding.provider.baseUrl')}</label>
+              <input id="desktop-base-url" style={{ ...input, background: palette.input, borderColor: palette.inputBorder, color: palette.text }} type="text" value={baseUrl} onChange={(event) => { setBaseUrl(event.target.value) }} placeholder="https://api.deepseek.com" />
               <div style={{ display: 'flex', gap: '0.7rem', alignItems: 'center' }}>
-                <button style={button} disabled={busy} onClick={() => { void saveCredential() }}>{busy ? 'Saving…' : 'Save to Keychain'}</button>
-                <button style={{ ...button, background: 'transparent', color: '#4a4f59' }} onClick={() => { setStep(0) }}>Back</button>
+                <button style={button} disabled={busy} onClick={() => { void saveCredential() }}>{busy ? 'Saving…' : t('onboarding.provider.save')}</button>
+                <button style={{ ...button, background: 'transparent', color: '#4a4f59' }} onClick={() => { setStep(0) }}>{t('onboarding.back')}</button>
               </div>
             </section>
           )}
           {step === 2 && (
             <section>
-              <h2 style={{ marginTop: 0, fontSize: '1.2rem' }}>Choose a project</h2>
-              <p style={{ color: '#4a4f59' }}>Select the folder Harness will work in. The native macOS picker opens next.</p>
+              <h2 style={{ marginTop: 0, fontSize: '1.2rem' }}>{t('onboarding.workspace.title')}</h2>
+              <p style={{ color: palette.muted }}>{t('onboarding.workspace.body')}</p>
               <div style={{ display: 'flex', gap: '0.7rem', alignItems: 'center' }}>
-                <button style={button} disabled={busy} onClick={() => { void pickWorkspace() }}>{busy ? 'Waiting…' : 'Open Folder Picker'}</button>
-                <button style={{ ...button, background: 'transparent', color: '#4a4f59' }} onClick={() => { setStep(1) }}>Back</button>
+                <button style={button} disabled={busy} onClick={() => { void pickWorkspace() }}>{busy ? 'Waiting…' : t('onboarding.workspace.pick')}</button>
+                <button style={{ ...button, background: 'transparent', color: '#4a4f59' }} onClick={() => { setStep(1) }}>{t('onboarding.back')}</button>
               </div>
             </section>
           )}
@@ -132,12 +160,12 @@ export function DesktopOverlay(): ReactElement {
   }
 
   const stateLabel = {
-    starting: 'Starting Harness…',
-    running: 'Connected',
-    restarting: 'Restarting Harness…',
-    stopped: 'Harness stopped',
-    failed: 'Harness unavailable',
-    stopping: 'Stopping Harness…',
+    starting: t('status.starting'),
+    running: t('status.running'),
+    restarting: t('status.restarting'),
+    stopped: t('status.stopped'),
+    failed: t('status.failed'),
+    stopping: t('status.stopping'),
   }[lifecycle.state]
   return (
     <div aria-live="polite">
@@ -147,9 +175,14 @@ export function DesktopOverlay(): ReactElement {
       </div>
       {lifecycle.state === 'failed' && (
         <div role="alert" style={{ position: 'fixed', bottom: 18, left: '50%', transform: 'translateX(-50%)', zIndex: 950, background: '#fff', color: '#181a20', borderRadius: 12, padding: '1rem 1.3rem', boxShadow: '0 12px 40px rgba(0,0,0,0.25)', display: 'flex', gap: '0.9rem', alignItems: 'center' }}>
-          <span>Harness stopped unexpectedly.</span>
-          <button style={button} onClick={() => { void host.restartRuntime() }}>Restart Harness</button>
-          <button style={{ ...button, background: 'transparent', color: '#4a4f59' }} onClick={() => { void host.openLogs() }}>Open Logs</button>
+          <span>{t('failure.title')}</span>
+          <button style={button} onClick={() => { void host.restartRuntime() }}>{t('failure.restart')}</button>
+          <button style={{ ...button, background: 'transparent', color: '#4a4f59' }} onClick={() => { void host.openLogs() }}>{t('failure.logs')}</button>
+        </div>
+      )}
+      {notice !== undefined && (
+        <div role="alert" style={{ position: 'fixed', bottom: 18, left: '50%', transform: 'translateX(-50%)', zIndex: 950, background: palette.dialog, color: palette.text, borderRadius: 12, padding: '0.8rem 1.1rem', boxShadow: '0 12px 40px rgba(0,0,0,0.25)', fontSize: '0.85rem' }}>
+          {notice}
         </div>
       )}
     </div>
