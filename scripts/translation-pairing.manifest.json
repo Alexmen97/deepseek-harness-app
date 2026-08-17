@@ -3,10 +3,15 @@
     ".agents/notes/AGENTS.md",
     ".agents/notes/implemented/AGENTS.md",
     ".agents/notes/implemented/CLAUDE.md",
+    "apps/desktop/README.md",
+    "apps/desktop-agent-pkg/README.md",
     "docs/AGENTS.md",
     "docs/cordis-api/inherited.md",
+    "docs/desktop/",
     "docs/i18n/style-samples.md",
     "docs/i18n/terminology.md",
-    "docs/i18n/translation-prompt.md"
+    "docs/i18n/translation-prompt.md",
+    "packages/credentials/credentials-keychain/",
+    "packages/desktop/"
   ]
 }
