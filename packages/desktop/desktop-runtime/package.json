@@ -1,0 +1,108 @@
+{
+  "name": "@deepseek-ai/dsh-desktop-runtime",
+  "description": "DeepSeek Harness desktop runtime app: the closed runtime composition (agent spine, sandbox, persistence, workspace, API gateway) and the JSON-RPC stdio bin the macOS desktop client spawns",
+  "version": "0.1.0-rc.7",
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/deepseek-ai/deepseek-harness.git",
+    "directory": "packages/desktop/desktop-runtime"
+  },
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "bin": {
+    "dsh-desktop-runtime": "lib/bin.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./bin": {
+      "types": "./lib/types/bin.d.ts",
+      "default": "./lib/bin.js"
+    },
+    "./invariant": {
+      "types": "./lib/types/invariant.d.ts",
+      "default": "./lib/invariant.js"
+    },
+    "./info": {
+      "types": "./lib/types/info.d.ts",
+      "default": "./lib/info.js"
+    },
+    "./packaged-bin": {
+      "types": "./lib/types/packaged-bin.d.ts",
+      "default": "./lib/packaged-bin.js"
+    },
+    "./runner": {
+      "types": "./lib/types/runner.d.ts",
+      "default": "./lib/runner.js"
+    },
+    "./runtime/cordis.yml": "./runtime/cordis.yml",
+    "./runtime/cordis.snapshot.yml": "./runtime/cordis.snapshot.yml",
+    "./src/*": "./src/*",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/bin.js",
+    "lib/invariant.js",
+    "lib/info.js",
+    "lib/index.js",
+    "lib/packaged-bin.js",
+    "lib/runner.js",
+    "lib/types/**/*.d.ts",
+    "runtime/cordis.yml",
+    "runtime/cordis.snapshot.yml"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "@deepseek-ai/dsh-agent-default-model": "workspace:^",
+    "@deepseek-ai/dsh-agent-spine-demo": "workspace:^",
+    "@deepseek-ai/dsh-app-boot": "workspace:^",
+    "@deepseek-ai/dsh-attachment-local": "workspace:^",
+    "@deepseek-ai/dsh-bash-sandbox": "workspace:^",
+    "@deepseek-ai/cordis-plugin-include": "workspace:^",
+    "@deepseek-ai/dsh-credentials-keychain": "workspace:^",
+    "@deepseek-ai/dsh-desktop-jsonrpc-server": "workspace:^",
+    "@deepseek-ai/dsh-desktop-protocol": "workspace:^",
+    "@deepseek-ai/dsh-fs-local": "workspace:^",
+    "@deepseek-ai/dsh-fs-observation-policy": "workspace:^",
+    "@deepseek-ai/dsh-host-apiproxy": "workspace:^",
+    "@deepseek-ai/dsh-host-directory-picker-native": "workspace:^",
+    "@deepseek-ai/dsh-llm-deepseek": "workspace:^",
+    "@deepseek-ai/dsh-llm-replay": "workspace:^",
+    "@deepseek-ai/dsh-permission-presets": "workspace:^",
+    "@deepseek-ai/dsh-sandbox": "workspace:^",
+    "@deepseek-ai/dsh-sandbox-local": "workspace:^",
+    "@deepseek-ai/dsh-sandbox-policy": "workspace:^",
+    "@deepseek-ai/dsh-session-checkpoint-policy": "workspace:^",
+    "@deepseek-ai/dsh-session-persistence-jsonl": "workspace:^",
+    "@deepseek-ai/dsh-session-projection": "workspace:^",
+    "@deepseek-ai/dsh-session-projection-cache": "workspace:^",
+    "@deepseek-ai/dsh-session-query-sqlite": "workspace:^",
+    "@deepseek-ai/dsh-settings-file": "workspace:^",
+    "@deepseek-ai/dsh-storage": "workspace:^",
+    "@deepseek-ai/dsh-storage-domain": "workspace:^",
+    "@deepseek-ai/dsh-storage-json": "workspace:^",
+    "@deepseek-ai/dsh-subagent": "workspace:^",
+    "@deepseek-ai/dsh-subagent-spawn-in-process": "workspace:^",
+    "@deepseek-ai/dsh-subprocess-local": "workspace:^",
+    "@deepseek-ai/dsh-tool-ask-user": "workspace:^",
+    "@deepseek-ai/dsh-tool-fs": "workspace:^",
+    "@deepseek-ai/dsh-tool-fs-search": "workspace:^",
+    "@deepseek-ai/dsh-user-approval": "workspace:^",
+    "@deepseek-ai/dsh-user-questions": "workspace:^",
+    "@deepseek-ai/dsh-workspace": "workspace:^"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "workspace:^"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "workspace:^",
+    "@deepseek-ai/dsh-agent-loop-testkit": "workspace:^",
+    "@deepseek-ai/dsh-session": "workspace:^"
+  }
+}
