@@ -1,0 +1,51 @@
+/**
+ * Build Harness-Desktop-<version>-macOS-arm64.dmg from a built .app.
+ * Simple and professional: the app beside an Applications alias, sensible
+ * Finder layout when AppleScript is available, no custom installer.
+ */
+
+import { execFileSync, spawnSync } from 'node:child_process'
+import { existsSync, mkdirSync, readFileSync, rmSync, symlinkSync } from 'node:fs'
+import { resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const repo = resolve(fileURLToPath(new URL('.', import.meta.url)), '..')
+const appPath = resolve(repo, 'apps/desktop/src-tauri/target/release/bundle/macos/Harness Desktop.app')
+if (!existsSync(appPath)) {
+  console.error('make-desktop-dmg: bundle missing; run tauri build first')
+  process.exit(1)
+}
+
+const conf = JSON.parse(readFileSync(resolve(repo, 'apps/desktop/src-tauri/tauri.conf.json'), 'utf8'))
+const productName = conf.productName.replace(/ /g, '-')
+const dmgPath = resolve(repo, 'dist-exe', productName + '-' + conf.version + '-macOS-arm64.dmg')
+const stage = resolve(repo, 'dist-exe', '.dmg-stage')
+rmSync(stage, { recursive: true, force: true })
+mkdirSync(stage, { recursive: true })
+execFileSync('ditto', [appPath, resolve(stage, 'Harness Desktop.app')])
+symlinkSync('/Applications', resolve(stage, 'Applications'))
+
+execFileSync('hdiutil', ['create', '-volname', 'Harness Desktop', '-srcfolder', stage, '-ov', '-format', 'UDZO', dmgPath])
+
+// Finder layout: best-effort AppleScript; the DMG stays valid without it.
+const layoutScript = [
+  'on run argv',
+  'set dmgPath to item 1 of argv',
+  'tell application "Finder"',
+  'set dmg to disk dmgPath',
+  'open dmg',
+  'set the bounds of the container window of dmg to {100, 100, 700, 430}',
+  'set position of item "Harness Desktop.app" of dmg to {140, 160}',
+  'set position of item "Applications" of dmg to {450, 160}',
+  'update without registering applications',
+  'close dmg',
+  'end tell',
+  'end run',
+].join('\n')
+const layout = spawnSync('osascript', ['-e', layoutScript, dmgPath], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
+if (layout.status !== 0) {
+  console.log('make-desktop-dmg: Finder layout skipped (' + (layout.stderr || '').trim() + ')')
+}
+
+rmSync(stage, { recursive: true, force: true })
+console.log('make-desktop-dmg: ' + dmgPath)

@@ -1,0 +1,118 @@
+name: Desktop
+
+on:
+  pull_request:
+    paths:
+      - apps/desktop/**
+      - apps/desktop-agent-pkg/**
+      - packages/desktop/**
+      - packages/credentials/credentials-keychain/**
+      - packages/api/gateway/**
+      - scripts/build-exe-for-desktop.ts
+      - scripts/desktop-icon.mjs
+      - scripts/ensure-desktop-sidecar.mjs
+      - scripts/sign-desktop.mjs
+      - scripts/verify-desktop-release.mjs
+      - scripts/make-desktop-dmg.mjs
+      - .github/workflows/desktop.yml
+  workflow_dispatch:
+
+jobs:
+  checks:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+      - run: pnpm install --frozen-lockfile
+      - name: Typecheck
+        run: |
+          pnpm exec tsc -b tsconfig.host.json
+          pnpm exec tsc -b tsconfig.client.json
+      - name: Lint
+        run: pnpm exec oxlint -c .oxlintrc.json packages/desktop packages/credentials/credentials-keychain packages/api/gateway/src/client apps/desktop/src
+      - name: Desktop test suites
+        run: pnpm exec vitest run packages/desktop packages/credentials/credentials-keychain packages/api/gateway packages/api/remotes apps/desktop/tests
+      - name: Rust tests
+        working-directory: apps/desktop/src-tauri
+        run: cargo test --lib
+      - name: Frontend build
+        working-directory: apps/desktop
+        run: pnpm exec vite build
+
+  release-unsigned:
+    needs: checks
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+      - run: pnpm install --frozen-lockfile
+      - name: Build runtime executable
+        run: node --import tsx/esm scripts/build-exe-for-desktop.ts
+      - name: Build app bundle
+        working-directory: apps/desktop
+        run: pnpm exec tauri build
+      - name: Release verification (unsigned)
+        run: node scripts/verify-desktop-release.mjs
+      - name: Upload development artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Harness-Desktop-dev-arm64
+          path: apps/desktop/src-tauri/target/release/bundle/macos/Harness Desktop.app
+
+  release-signed:
+    needs: checks
+    runs-on: macos-15
+    environment: desktop-release
+    if: vars.APPLE_SIGNING_IDENTITY != ''
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+      - run: pnpm install --frozen-lockfile
+      - name: Import signing certificate
+        env:
+          APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_KEYCHAIN_PASSWORD: ${{ secrets.APPLE_KEYCHAIN_PASSWORD }}
+        run: |
+          echo -n "$APPLE_CERTIFICATE_BASE64" | base64 --decode > certificate.p12
+          security create-keychain -p "$APPLE_KEYCHAIN_PASSWORD" build.keychain
+          security import certificate.p12 -k build.keychain -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$APPLE_KEYCHAIN_PASSWORD" build.keychain
+      - name: Build runtime executable
+        run: node --import tsx/esm scripts/build-exe-for-desktop.ts
+      - name: Build app bundle
+        working-directory: apps/desktop
+        run: pnpm exec tauri build
+      - name: Sign, notarize, staple
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: node scripts/sign-desktop.mjs --mode developer-id
+      - name: DMG
+        run: node scripts/make-desktop-dmg.mjs
+      - name: Release verification (signed)
+        run: node scripts/verify-desktop-release.mjs
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Harness-Desktop-signed-arm64
+          path: |
+            apps/desktop/src-tauri/target/release/bundle/macos/Harness Desktop.app
+            dist-exe/*.dmg
