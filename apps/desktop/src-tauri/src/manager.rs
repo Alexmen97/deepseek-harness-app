@@ -26,6 +26,10 @@ use tauri::{AppHandle, Emitter, Manager};
 /// can legitimately reach megabytes; 16 MiB covers them while bounding the
 /// reader's allocation against a pathological unterminated line.
 pub const DEFAULT_MAX_FRAME_BYTES: usize = 16 * 1024 * 1024;
+/// Harness release this desktop milestone pins (authoritative: the repository root package.json).
+pub const HARNESS_VERSION: &str = "0.1.0-rc.7";
+/// The desktop wire protocol version the app expects (mirrors the TypeScript DESKTOP_PROTOCOL_VERSION).
+pub const DESKTOP_PROTOCOL_VERSION: u32 = 1;
 
 /// Restart budget: at most this many automatic restarts per window.
 pub const MAX_RESTARTS_PER_WINDOW: u32 = 3;
@@ -364,9 +368,21 @@ impl<H: DesktopHost> RuntimeManager<H> {
         generation: u64,
         method: String,
         rpc_id: String,
-        payload: Value,
+        mut payload: Value,
     ) -> Result<Value, String> {
-        if generation != self.generation() {
+        self.host.emit_log(&format!("request {method} generation={generation}"));
+        if method == "desktop.initialize" {
+            // The protocol requires the launch cwd; the client may not know
+            // it before the first run, so the manager fills its own.
+            if let Some(object) = payload.as_object_mut() {
+                if !object.contains_key("cwd") {
+                    object.insert("cwd".into(), json!(self.workspace_dir().to_string_lossy()));
+                }
+            }
+        }
+        // Generation 0 is the unanchored first contact: the client cannot
+        // know the runtime's generation before its first state event.
+        if generation != 0 && generation != self.generation() {
             return Err(format!(
                 "stale generation: request targets {generation}, runtime serves {}",
                 self.generation()
@@ -398,9 +414,13 @@ impl<H: DesktopHost> RuntimeManager<H> {
             }
         }
         match rx.recv_timeout(REQUEST_TIMEOUT) {
-            Ok(result) => result,
-            Err(_) => {
+            Ok(result) => {
+                self.host.emit_log(&format!("request {method} settled"));
+                result
+            }
+            Err(error) => {
                 self.pending.lock().unwrap().remove(&request_id);
+                self.host.emit_log(&format!("request {method} failed: {error:?}"));
                 Err("request timed out or the runtime exited".into())
             }
         }
@@ -541,6 +561,7 @@ fn route_frame<H: DesktopHost>(value: Value, generation: u64, manager: &SharedMa
         (Some(id), None) => {
             let mut pending = manager.pending.lock().unwrap();
             if let Some(entry) = pending.remove(&id) {
+                manager.host.emit_log(&format!("response {id}"));
                 let result = if let Some(error) = value.get("error") {
                     Err(error.to_string())
                 } else {
@@ -614,7 +635,7 @@ fn capture_stderr<H: DesktopHost>(stderr: std::process::ChildStderr, manager: Sh
 }
 
 /// Append-only desktop log with one rotation at LOG_ROTATE_BYTES.
-fn open_log(dir: &PathBuf) -> std::io::Result<File> {
+pub(crate) fn open_log(dir: &PathBuf) -> std::io::Result<File> {
     std::fs::create_dir_all(dir)?;
     let path = dir.join("desktop.log");
     if let Ok(meta) = std::fs::metadata(&path) {
@@ -744,16 +765,70 @@ pub fn keychain_delete(reference: &str) -> Result<(), String> {
     }
 }
 
-pub fn diagnostics_summary<H: DesktopHost>(manager: &RuntimeManager<H>) -> String {
+pub fn diagnostics_summary<H: DesktopHost>(manager: &RuntimeManager<H>, app: &AppHandle) -> String {
     let inner = manager.inner.lock().unwrap();
+    let prefs = read_prefs(app);
     format!(
-        "Desktop version: 0.1.0\nHarness version: 0.1.0-rc.7\nDesktop protocol: 1\nRuntime state: {:?}\nRuntime generation: {}\nLast runtime exit: {:?}\nmacOS: {}\nArchitecture: {}",
+        "Desktop version: {}\nHarness version: {}\nDesktop protocol: {}\nmacOS version: {}\nArchitecture: {}\nRuntime state: {:?}\nRuntime generation: {}\nSigning status: {}\nApp bundle path: {}\nCurrent locale: {}\nCurrent theme: {}\nLast runtime exit: {:?}",
+        env!("CARGO_PKG_VERSION"),
+        HARNESS_VERSION,
+        DESKTOP_PROTOCOL_VERSION,
+        os_info::get().version(),
+        std::env::consts::ARCH,
         inner.state,
         manager.generation(),
+        signing_status(),
+        bundle_path(app),
+        prefs.get("language").cloned().unwrap_or_else(|| "system".into()),
+        prefs.get("appearance").cloned().unwrap_or_else(|| "system".into()),
         inner.last_exit,
-        std::env::consts::OS,
-        std::env::consts::ARCH,
     )
+}
+
+fn read_prefs(app: &AppHandle) -> serde_json::Map<String, Value> {
+    let path = app
+        .path()
+        .app_data_dir()
+        .ok()
+        .and_then(|dir| std::fs::read_to_string(dir.join("prefs.json")).ok());
+    match path {
+        Some(text) => serde_json::from_str::<Value>(&text)
+            .ok()
+            .and_then(|value| value.as_object().cloned())
+            .unwrap_or_default(),
+        None => serde_json::Map::new(),
+    }
+}
+
+fn bundle_path(app: &AppHandle) -> String {
+    app.path()
+        .resource_dir()
+        .map(|dir| {
+            dir.parent()
+                .and_then(std::path::Path::parent)
+                .map(|bundle| bundle.to_string_lossy().to_string())
+                .unwrap_or_else(|| dir.to_string_lossy().to_string())
+        })
+        .unwrap_or_else(|_| "unavailable".to_string())
+}
+
+/// Detectable signing state: the codesign authority chain, or ad-hoc/unsigned.
+fn signing_status() -> String {
+    let Ok(exe) = std::env::current_exe() else { return "unavailable".to_string() };
+    let output = std::process::Command::new("/usr/bin/codesign")
+        .args(["-dv", "--verbose=2"])
+        .arg(&exe)
+        .output();
+    let Ok(output) = output else { return "unavailable".to_string() };
+    let text = String::from_utf8_lossy(&output.stderr);
+    let authorities: Vec<&str> = text
+        .lines()
+        .filter_map(|line| line.trim().strip_prefix("Authority="))
+        .collect();
+    if authorities.is_empty() {
+        return "ad-hoc or unsigned".to_string()
+    }
+    format!("signed ({})", authorities.join(", "))
 }
 
 #[cfg(test)]

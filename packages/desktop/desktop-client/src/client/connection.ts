@@ -68,9 +68,31 @@ export function apply(ctx: Context): void {
           sinks.onStateChange?.(state)
         },
       }, config ?? {})
-      controller.start()
+      // The runtime may still be spawning at boot; begin the connect loop
+      // only once a generation reports running, so the first handshake does
+      // not burn the controller's initial attempts against a dead transport.
+      let unsubState: (() => void) | undefined
+      const begin = (): void => {
+        if (unsubState !== undefined) {
+          unsubState()
+          unsubState = undefined
+        }
+        controller.start()
+      }
+      const host = ctx.get('desktopHost') as { getLifecycle(): { state: string } } | undefined
+      if (host?.getLifecycle().state === 'running') {
+        begin()
+      } else {
+        unsubState = desktopBindings().transport.subscribeState((state) => {
+          if (state.state === 'running') begin()
+        })
+      }
       return {
         stop: () => {
+          if (unsubState !== undefined) {
+            unsubState()
+            unsubState = undefined
+          }
           controller.stop()
           publishDescription(undefined)
           api.dispose()

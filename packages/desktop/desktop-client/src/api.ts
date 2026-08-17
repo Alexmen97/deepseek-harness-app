@@ -83,7 +83,7 @@ export class DesktopApiClient extends AbstractApiClient {
   /** The runtime refuses apiproxy routes until desktop.initialize completes. */
   private ensureInitialized(): Promise<void> {
     this.initPromise ??= (async () => {
-      let workspace: string | undefined
+      let workspace: string | null | undefined
       try {
         workspace = await desktopBindings().host.prefsGet('workspace')
       } catch {
@@ -95,7 +95,7 @@ export class DesktopApiClient extends AbstractApiClient {
       await this.transport.request({
         method: 'desktop.initialize',
         rpcId: '',
-        payload: workspace === undefined || workspace === '' ? {} : { cwd: workspace },
+        payload: workspace == null || workspace === '' ? {} : { cwd: workspace },
         generation: this.generation,
       })
     })().catch((error: unknown) => {

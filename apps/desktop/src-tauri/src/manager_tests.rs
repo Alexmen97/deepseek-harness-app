@@ -10,7 +10,7 @@ use std::time::{Duration, Instant};
 
 use serde_json::json;
 
-use super::{redact_secrets, route_frame, DesktopHost, LifecycleEvent, RuntimeFrame, RuntimeManager, RuntimeState};
+use super::{open_log, redact_secrets, route_frame, DesktopHost, LifecycleEvent, RuntimeFrame, RuntimeManager, RuntimeState, LOG_ROTATE_BYTES};
 
 /// Serializes tests that mutate process-wide environment variables.
 static ENV_LOCK: Mutex<()> = Mutex::new(());
@@ -314,7 +314,9 @@ fn stale_generation_request_is_rejected() {
     let (manager, _host) = setup_manager(&dir, ECHO_SERVER, None, None);
     manager.start().unwrap();
     assert!(wait_until(Duration::from_secs(5), || manager.state() == RuntimeState::Running));
-    let error = manager.request("req-1".into(), 0, "echo".into(), String::new(), json!({})).unwrap_err();
+    // Generation 0 is the unanchored first contact; a mismatched positive
+    // generation is the stale case the guard rejects.
+    let error = manager.request("req-1".into(), 2, "echo".into(), String::new(), json!({})).unwrap_err();
     assert!(error.contains("stale generation"));
     manager.stop().unwrap();
 }
@@ -396,4 +398,36 @@ fn route_frame_handles_protocol_mismatch_without_panicking() {
     assert!(host.has_event("state:Stopping:1"), "events: {:?}", host.events());
     route_frame(json!({ "jsonrpc": "2.0", "method": "desktop.status", "params": { "state": "ready" } }), 1, &shared);
     assert!(host.has_event("state:Running:1"), "events: {:?}", host.events());
+}
+
+#[test]
+fn desktop_log_rotation_bounds_total_growth() {
+    use std::io::Write;
+    let _env = ENV_LOCK.lock().unwrap();
+    let dir = TestDir::new("log-rotation");
+    let logs = dir.path().join("logs");
+    let chunk = vec![b'x'; 512 * 1024];
+    {
+        let mut file = open_log(&logs).unwrap();
+        file.write_all(&chunk).unwrap();
+    }
+    {
+        // Still under the limit: no rotation, the file keeps growing.
+        let mut file = open_log(&logs).unwrap();
+        file.write_all(&chunk).unwrap();
+        file.write_all(&chunk).unwrap();
+    }
+    assert!(!logs.join("desktop.log.1").exists());
+    {
+        // Over the limit now: opening rotates and starts a fresh file.
+        let mut file = open_log(&logs).unwrap();
+        file.write_all(b"tail").unwrap();
+    }
+    let rotated = logs.join("desktop.log.1");
+    assert!(rotated.exists());
+    let rotated_len = std::fs::metadata(&rotated).unwrap().len();
+    assert!(rotated_len > LOG_ROTATE_BYTES as u64);
+    assert_eq!(std::fs::metadata(logs.join("desktop.log")).unwrap().len(), 4);
+    // One retained file: the total bound stays below two rotations.
+    assert!(!logs.join("desktop.log.2").exists());
 }

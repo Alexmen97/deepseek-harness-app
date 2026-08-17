@@ -34,6 +34,10 @@ function fakeTransport() {
         restartRuntime: async () => {},
         stopRuntime: async () => {},
         diagnostics: async () => ({}),
+        setMenuLanguage: async () => {},
+        notify: async () => {},
+        subscribeFocus: () => () => {},
+        pickAttachments: async () => [],
       },
     } satisfies DesktopBindings,
   }
@@ -48,6 +52,7 @@ describe('DesktopApiClient carrier', () => {
     const fake = fakeTransport()
     installDesktopBindings(fake.bindings)
     const api = new DesktopApiClient(fake.bindings.transport)
+    fake.pushState({ state: 'running', generation: 1 })
     fake.setRespond(async request => ({
       rpcId: request.rpcId,
       result: { ok: true, value: { items: [] } },
@@ -56,8 +61,8 @@ describe('DesktopApiClient carrier', () => {
     expect(response.result.ok).toBe(true)
     // The carrier initializes the runtime before the first business route.
     expect(fake.requests).toHaveLength(2)
-    expect(fake.requests[0]).toMatchObject({ method: 'desktop.initialize', generation: 0 })
-    expect(fake.requests[1]).toMatchObject({ method: 'session.list', payload: {}, generation: 0 })
+    expect(fake.requests[0]).toMatchObject({ method: 'desktop.initialize', generation: 1 })
+    expect(fake.requests[1]).toMatchObject({ method: 'session.list', payload: {}, generation: 1 })
     expect(typeof fake.requests[1]?.rpcId).toBe('string')
     api.dispose()
   })
@@ -98,6 +103,7 @@ describe('DesktopApiClient carrier', () => {
     const fake = fakeTransport()
     installDesktopBindings(fake.bindings)
     const api = new DesktopApiClient(fake.bindings.transport)
+    fake.pushState({ state: 'running', generation: 1 })
     fake.setRespond(async () => { throw new Error('runtime gone') })
     await expect(api.sessions.list({})).rejects.toThrow('runtime gone')
     api.dispose()
@@ -107,6 +113,7 @@ describe('DesktopApiClient carrier', () => {
     const fake = fakeTransport()
     installDesktopBindings(fake.bindings)
     const api = new DesktopApiClient(fake.bindings.transport, 50)
+    fake.pushState({ state: 'running', generation: 1 })
     fake.setRespond(async (request) => {
       if (request.method === 'desktop.initialize') return { rpcId: request.rpcId, result: { ok: true, value: {} } }
       return new Promise<never>(() => {})
