@@ -224,6 +224,14 @@
       // so the generic wildcard cannot map these three package names.
       "@deepseek-ai/dsh-sdk-client": ["./packages/sdk/client/src"],
       "@deepseek-ai/dsh-sdk-protocol": ["./packages/sdk/protocol/src"],
+      "@deepseek-ai/dsh-desktop-protocol": ["./packages/desktop/desktop-protocol/src"],
+      "@deepseek-ai/dsh-desktop-protocol/invariant": ["./packages/desktop/desktop-protocol/src/invariant.ts"],
+      "@deepseek-ai/dsh-desktop-jsonrpc-server": ["./packages/desktop/desktop-jsonrpc-server/src"],
+      "@deepseek-ai/dsh-desktop-runtime": ["./packages/desktop/desktop-runtime/src"],
+      "@deepseek-ai/dsh-desktop-runtime/info": ["./packages/desktop/desktop-runtime/src/info.ts"],
+      "@deepseek-ai/dsh-desktop-client": ["./packages/desktop/desktop-client/src"],
+      "@deepseek-ai/dsh-desktop-client/*": ["./packages/desktop/desktop-client/*"],
+      "@deepseek-ai/dsh-credentials-keychain": ["./packages/credentials/credentials-keychain/src"],
       "@deepseek-ai/dsh-sdk-jsonrpc-server": ["./packages/sdk/server/src"],
       "@deepseek-ai/dsh-*": [
         "./packages/core/*/src",
