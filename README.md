@@ -19,6 +19,7 @@ DeepSeek Harness App wraps the packaged DeepSeek Harness runtime in a Tauri desk
 - Image attachments through paste, drop, or the native picker
 - API key in the macOS Keychain; no plaintext credential storage
 - English and Italian surfaces with a System language option
+- English, Chinese, Italian, Spanish, French, German, and Brazilian Portuguese surfaces with a System language option
 - Native menu, shortcuts, notifications, and About window
 
 ## Installation

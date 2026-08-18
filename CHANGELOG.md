@@ -6,6 +6,7 @@ All notable changes to DeepSeek Harness App are documented here in a Keep a Chan
 
 ### Added
 
+- Complete seven-language application localization: English, Chinese, Italian, Spanish, French, German, and Brazilian Portuguese, with live switching, system-locale detection, and a fail-closed CI/release coverage gate.
 - First public macOS preview of the Tauri desktop client over the packaged DeepSeek Harness runtime.
 - Keychain credential storage, native workspace picker, attachments, notifications, native menu, and English/Italian localization.
 - Public repository documentation: README, user guide, troubleshooting, privacy, security, roadmap, contributing, and code of conduct.

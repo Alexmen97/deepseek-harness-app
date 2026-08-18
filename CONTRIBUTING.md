@@ -50,3 +50,11 @@ state the behavior changed.
 
 Logical boundaries, one change per commit, tests with behavior changes. No
 secrets, no generated artifacts, no developer-specific absolute paths.
+
+## Translations
+
+The application UI ships seven complete locales: English (`en`, the canonical source for desktop-owned strings), Chinese (`zh`, the upstream dictionary source of truth), Italian (`it`), Spanish (`es`), French (`fr`), German (`de`), and Brazilian Portuguese (`pt-BR`). A locale is supported only at 100% coverage: missing, empty, or placeholder-divergent strings fail the gates.
+
+Upstream UI copy lives in the per-package `locales.ts` dictionaries under `packages/client/*` and `packages/extensions/ui-cordis`; desktop-owned copy lives in `packages/desktop/desktop-client/src/ui/strings.ts`; the native menu tables live in `apps/desktop/src-tauri/src/menu.rs`. When you add or edit an English or Chinese string, update every other locale in the same change. Placeholders like `{count}` must appear unchanged in every locale.
+
+Run `pnpm run desktop:i18n:check` for key/placeholder completeness and `pnpm run desktop:hardcoded-strings` for a best-effort hardcoded-copy scan; both run in CI and block releases. See `docs/desktop/LOCALIZATION-AUDIT.md` for the full inventory.

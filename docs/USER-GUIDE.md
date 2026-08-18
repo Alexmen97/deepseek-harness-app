@@ -22,7 +22,7 @@ Paste or drop images into the composer, or use Session → Attach Image… for t
 
 ## Models and settings
 
-The Models page shows the runtime-reported providers and models. The desktop settings dialog manages the language (System/English/Italiano), the API key (replace/remove), the Base URL, and the diagnostics. Settings → Advanced shows versions, runtime state, and the log actions.
+The Models page shows the runtime-reported providers and models. The desktop settings dialog manages the language (System, English, 中文, Italiano, Español, Français, Deutsch, Português (Brasil)), the API key (replace/remove), the Base URL, and the diagnostics. Settings → Advanced shows versions, runtime state, and the log actions. Changing the language applies immediately without restarting Harness; the selection is saved and restored on the next launch.
 
 ## Troubleshooting
 
