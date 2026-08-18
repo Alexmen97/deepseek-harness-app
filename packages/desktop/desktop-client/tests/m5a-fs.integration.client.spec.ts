@@ -1,8 +1,13 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { existsSync } from 'node:fs'
+import { resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { spawnNodeRuntime, type NodeRuntimeHarness } from './node-transport.client.ts'
 
+const EXE = resolve(fileURLToPath(new URL('../../../../', import.meta.url)), 'dist-exe', 'dsh-desktop-runtime-macos-arm64')
+
 /** Real ctx.fs round trip over the packaged runtime: create, update, stale rejection. */
-describe('M5A filesystem integration over the packaged runtime', () => {
+describe.skipIf(!existsSync(EXE))('M5A filesystem integration over the packaged runtime', () => {
   let runtime: NodeRuntimeHarness | undefined
   let sessionId = ''
   let version = ''
