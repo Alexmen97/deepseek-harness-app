@@ -4,7 +4,9 @@
 
 一个基于 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)构建的开源 macOS 桌面客户端，为 Harness 会话、工具调用、审批、工作区和模型交互提供原生桌面体验。本项目由社区开发，属于非官方项目：与 DeepSeek 无关，也未获得其背书。
 
-<!-- 截图占位：docs/assets/hero.png。首次公开发布前放入实际截图。 -->
+![带已打开会话和已完成工具调用的 Harness Desktop](docs/assets/hero.png)
+
+更多视图：[首次运行引导](docs/assets/onboarding.png)、[对话](docs/assets/conversation.png)、[审批](docs/assets/approval.png)、[设置](docs/assets/settings.png)。
 
 ## 关于
 

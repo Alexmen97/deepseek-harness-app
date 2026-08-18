@@ -4,9 +4,9 @@ English | [中文](README.zh.md)
 
 An open-source macOS desktop client built on top of [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness), providing a native desktop experience for Harness sessions, tool calls, approvals, workspaces, and model interaction. Community-developed and unofficial: not affiliated with or endorsed by DeepSeek.
 
-<!-- Screenshot placeholder: docs/assets/hero.png — the application window
-     with an open session. Drop the captured image in before the first
-     public release. -->
+![Harness Desktop with an open session and a completed tool call](docs/assets/hero.png)
+
+More views: [first-run onboarding](docs/assets/onboarding.png), [conversation](docs/assets/conversation.png), [approval](docs/assets/approval.png), [settings](docs/assets/settings.png).
 
 ## About
 

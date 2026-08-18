@@ -1,6 +1,6 @@
 # Screenshots
 
-Expected screenshot files for the public README. Placeholders only: the real images are captured from the running application and dropped in before the first public release.
+Real screenshots captured from the running application (v0.1.0, English UI, demo workspace). Before replacing one, re-check the privacy audit in docs/desktop/LOCALIZATION-AUDIT.md: no keys, no personal paths, no private conversations.
 
 - hero.png — the application window with a session open
 - onboarding.png — the first-run welcome dialog
