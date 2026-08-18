@@ -2,22 +2,51 @@
 
 English | [中文](CONTRIBUTING.zh.md)
 
-Thank you for your interest in contributing to DeepSeek Harness!
+## Requirements
 
-We deeply believe in the power of open source communities, and that belief has shaped this project from the very beginning.
+- Node ^22.19 || >=24 with pnpm.
+- Rust stable with Cargo (for the desktop crate).
+- macOS on Apple Silicon for the full desktop build; tests and typecheck run
+  on any supported host.
 
-DeepSeek Harness is still at an early stage and under active development. We are sorry that we cannot accept external pull requests at the moment. However, contributing code to this repository is far from the only way to help. There are many other ways to get involved:
+## Setup
 
-- Identify and report issues or bugs in GitHub Discussions:
-  - Upvote discussions that you would like to bring to the team's attention. We are a very small team and may not be able to reply to every post, but we monitor them and consider them when allocating resources.
-- Contribute to the ecosystem:
-  - Create a plugin that excites you and share it with others:
-    - Associate your GitHub project with the `dsh-plugin` topic to help others discover your plugin.
-  - Write blog posts and how-to guides about DeepSeek Harness.
-  - Answer questions and help other members of the community.
+```sh
+pnpm install
+pnpm exec tsc -b tsconfig.host.json
+pnpm exec tsc -b tsconfig.client.json
+pnpm exec vitest run packages/desktop packages/credentials/credentials-keychain packages/api/gateway packages/api/remotes apps/desktop/tests
+cd apps/desktop/src-tauri && cargo test --lib
+```
 
-DeepSeek Harness is designed to be deeply customizable. We do not believe that packages in the official repository are inherently more important than packages created by the community. You may consider this repository an idea, an official showcase, and a source of inspiration, but not a mandate from us.
+## Architecture overview
 
-We have already seen exciting projects emerge from the community, and we hope to see the ecosystem continue to grow in its own directions.
+The application reuses the upstream DeepSeek Harness client as a static
+bundle over a Tauri IPC bridge: the Rust manager owns the packaged runtime
+process, and the desktop wire protocol is the only transport. See
+docs/desktop/ARCHITECTURE.md and docs/project/REPOSITORY-STRUCTURE.md.
 
-Into the unknown.
+## Desktop-specific boundaries
+
+- Rust owns the runtime process; the WebView never spawns or kills it.
+- The desktop surface adds commands only through the allowlisted host
+  surface in apps/desktop/src-tauri/src/commands.rs.
+- The two upstream patches live in docs/desktop/UPSTREAM-PATCHES.md; keep
+  them minimal and tested.
+
+## Upstream compatibility rule
+
+Do not modify agent-loop, model, or session behavior for desktop-only
+features. Changes to upstream packages require a justified upstream patch
+with a regression test, documented in docs/desktop/UPSTREAM-PATCHES.md.
+
+## Formatting and lint
+
+Run oxlint with the repository configuration and keep typecheck clean. The
+pre-commit hook fixes staged lint and checks whitespace; commit messages
+state the behavior changed.
+
+## Commit expectations
+
+Logical boundaries, one change per commit, tests with behavior changes. No
+secrets, no generated artifacts, no developer-specific absolute paths.

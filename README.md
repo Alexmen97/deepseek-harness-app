@@ -1,57 +1,88 @@
-# DeepSeek Harness
+# DeepSeek Harness App
 
 English | [中文](README.zh.md)
 
-DeepSeek Harness (`dsh`) is an open-source agent harness developed by [DeepSeek AI](https://deepseek.com).
+An open-source macOS desktop client built on top of [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness), providing a native desktop experience for Harness sessions, tool calls, approvals, workspaces, and model interaction. Community-developed and unofficial: not affiliated with or endorsed by DeepSeek.
 
-It uses an architecture where **everything is a plugin**, and is powered by [Cordis](https://github.com/cordiverse/cordis), whose design is described in [_A Programming Paradigm for Spatiotemporal Composability_](https://github.com/cordiverse/paper).
+<!-- Screenshot placeholder: docs/assets/hero.png — the application window
+     with an open session. Drop the captured image in before the first
+     public release. -->
 
-## Developer preview
+## About
 
-DeepSeek Harness is currently in _developer preview_ and is iterating rapidly. **THERE WILL BE COMPATIBILITY-BREAKING CHANGES.**
+DeepSeek Harness App wraps the packaged DeepSeek Harness runtime in a Tauri desktop shell. The Rust host owns the runtime process, the macOS Keychain holds the API key, and the conversation UI is the upstream Harness client composed unchanged. Built on DeepSeek Harness by DeepSeek AI.
 
-## Run
+## Features
 
-### Run from `npm`
+- First-run onboarding with a native workspace picker
+- Sessions with streaming responses, tool calls, approvals, and questions
+- Image attachments through paste, drop, or the native picker
+- API key in the macOS Keychain; no plaintext credential storage
+- English and Italian surfaces with a System language option
+- Native menu, shortcuts, notifications, and About window
 
-Install `Node.js`, then run:
+## Installation
 
-```sh
-npx @deepseek-ai/dsh web
-```
+1. Download the latest .dmg from Releases.
+2. Open the DMG.
+3. Drag Harness Desktop to Applications.
+4. Launch the app.
+5. Configure your DeepSeek API key.
+6. Select a project.
 
-The command starts the Web UI, served at `http://127.0.0.1:3080` by default. See [Web UI guide](docs/user/guide/index.md).
+No Node installation is required.
 
-### Run from source
+## Requirements
 
-To run from a repository checkout:
+- macOS on Apple Silicon
+- A DeepSeek API key (or a compatible custom Base URL)
 
-```sh
-git clone https://github.com/deepseek-ai/deepseek-harness.git
-cd deepseek-harness
-pnpm install
-pnpm run build
-pnpm dsh web
-```
+## Getting Started
 
-## Community and support
-
-- Feel free to submit feedback or bug reports through [GitHub Discussions](https://github.com/deepseek-ai/deepseek-harness/discussions).
-- Add the [`dsh-plugin`](https://github.com/topics/dsh-plugin) topic to your plugin repository for discoverability.
-- Join <a href="https://discord.gg/Ycq5dCaS4">DeepSeek Harness Discord community</a>.
-
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md).
+See [docs/USER-GUIDE.md](docs/USER-GUIDE.md) for the first-run flow and [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) for help.
 
 ## Development
 
-Start with the [development guide](docs/development.md) and [architecture documentation](docs/architecture.md).
+```sh
+pnpm install
+node scripts/build-exe-for-desktop.ts
+cd apps/desktop && pnpm exec tauri build
+```
 
-For agents, follow [AGENTS.md](AGENTS.md).
+See [docs/desktop/M1B-TESTING.md](docs/desktop/M1B-TESTING.md) for the test layers and [CONTRIBUTING.md](CONTRIBUTING.md) for the boundaries.
+
+## Architecture
+
+React (reused Harness UI) → DesktopApiClient → Tauri IPC → the Rust runtime manager → stdio JSON-RPC → the packaged Harness runtime. The full contract is in [docs/desktop/ARCHITECTURE.md](docs/desktop/ARCHITECTURE.md).
+
+## Building
+
+```sh
+pnpm install
+node scripts/build-exe-for-desktop.ts
+cd apps/desktop && pnpm exec tauri build
+node scripts/sign-desktop.mjs --mode adhoc-hardened
+node scripts/make-desktop-dmg.mjs
+```
+
+Public releases are Developer ID signed, notarized, and stapled; see [docs/desktop/DISTRIBUTION.md](docs/desktop/DISTRIBUTION.md).
+
+## Security
+
+The API key lives in the macOS Keychain and is never read back by the frontend. The WebView loads only bundled content, external links open in the system browser, and the host IPC surface contains no generic exec or filesystem commands. Report vulnerabilities through private vulnerability reporting ([SECURITY.md](SECURITY.md)).
+
+## Roadmap
+
+See [ROADMAP.md](ROADMAP.md).
+
+## Upstream
+
+This repository is derived from [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) (MIT), pinned to the version recorded in [docs/project/upstream-base.json](docs/project/upstream-base.json). The upstream history is preserved; the desktop additions and the two upstream patches are listed in [docs/project/REPOSITORY-STRUCTURE.md](docs/project/REPOSITORY-STRUCTURE.md) and [docs/desktop/UPSTREAM-PATCHES.md](docs/desktop/UPSTREAM-PATCHES.md).
+
+## Contributing
+
+Pull requests are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) and the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## License
 
-[MIT](LICENSE)
-
-Third-party dependencies and their licenses are disclosed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+MIT. See [LICENSE](LICENSE) and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

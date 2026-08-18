@@ -1,5 +1,6 @@
 CLAUDE.local.md
 .env
+.env.*
 node_modules/
 lib/
 *.tsbuildinfo
@@ -26,6 +27,13 @@ tmp/
 .idea
 mise.toml
 dist-exe/
+*.p12
+*.p8
+*.cer
+*.mobileprovision
+*.keychain-db
+notarization/
+*.dmg.staging/
 apps/desktop/src-tauri/resources/sidecar/
 apps/desktop/src-tauri/resources/runtime/
 apps/desktop/src-tauri/icons/icon.iconset/

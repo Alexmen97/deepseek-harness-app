@@ -24,7 +24,7 @@ function fakeBindings(options: { workspace?: string; configured?: boolean } = {}
   const stateHandlers = new Set<(state: DesktopRuntimeLifecycle) => void>()
   const frameHandlers = new Set<(frame: DesktopRuntimeFrame) => void>()
   const host: FakeHost = {
-    pickWorkspace: vi.fn(async () => '/Users/alex/projects/demo'),
+    pickWorkspace: vi.fn(async () => '/Users/example/projects/demo'),
     credentialStatus: vi.fn(async () => ({ configured: options.configured ?? false })),
     credentialSet: vi.fn(async () => {}),
     credentialDelete: vi.fn(async () => {}),
@@ -82,7 +82,7 @@ describe('DesktopOverlay', () => {
     fireEvent.click(screen.getByText('Open Folder Picker'))
     await waitFor(() => {
       expect(host.pickWorkspace).toHaveBeenCalled()
-      expect(host.prefsSet).toHaveBeenCalledWith('workspace', '/Users/alex/projects/demo')
+      expect(host.prefsSet).toHaveBeenCalledWith('workspace', '/Users/example/projects/demo')
       // Completing onboarding relaunches the runtime with the new workspace.
       expect(host.restartRuntime).toHaveBeenCalled()
     })
