@@ -71,7 +71,7 @@ export interface DesktopHost {
   stopRuntime(): Promise<void>
   /** Render a redacted diagnostics summary. */
   diagnostics(): Promise<Record<string, string>>
-  /** Rebuild the native menu with the resolved desktop language (en/it). */
+  /** Rebuild the native menu with the resolved desktop language (one of seven). */
   setMenuLanguage(language: string): Promise<void>
   /** Show one native notification (privacy-minimal copy). */
   notify(kind: string, title: string, body: string): Promise<void>

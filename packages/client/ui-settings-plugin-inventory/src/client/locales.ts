@@ -46,3 +46,113 @@ export const en = {
   failed: 'Mount failed',
   unloading: 'Unloading',
 } satisfies Record<PluginInventoryLocaleKey, string>
+
+/** Italian dictionary, complete against the canonical key set. */
+export const it = {
+  'tab': 'Elenco plugin',
+  'loading': 'Lettura plugin…',
+  'error': 'Plugin temporaneamente non disponibili.',
+  'retry': 'Riprova',
+  'search': 'Cerca plugin',
+  'catalog': 'Elenco plugin',
+  'empty': 'Nessun plugin disponibile.',
+  'emptySearch': 'Nessun plugin corrispondente.',
+  'enabledTag': 'Abilitato',
+  'disabledTag': 'Disabilitato',
+  'configuration': 'Configurazione',
+  'cordis': 'Stato Cordis',
+  'unobserved': 'Non montato',
+  'pending': 'In attesa delle dipendenze',
+  'loadingPhase': 'Caricamento',
+  'active': 'Montato',
+  'failed': 'Montaggio non riuscito',
+  'unloading': 'Smontaggio',
+} satisfies Record<PluginInventoryLocaleKey, string>
+
+/** es dictionary, checked complete against the zh key set. */
+export const es = {
+  'tab': 'Lista de complementos',
+  'loading': 'Leyendo complementos…',
+  'error': 'Los complementos no están disponibles temporalmente.',
+  'retry': 'Reintentar',
+  'search': 'Buscar complementos',
+  'catalog': 'Lista de complementos',
+  'empty': 'No hay complementos disponibles.',
+  'emptySearch': 'No hay complementos que coincidan.',
+  'enabledTag': 'Habilitado',
+  'disabledTag': 'Deshabilitado',
+  'configuration': 'Configuración',
+  'cordis': 'Estado de Cordis',
+  'unobserved': 'No montado',
+  'pending': 'Esperando dependencias',
+  'loadingPhase': 'Cargando',
+  'active': 'Montado',
+  'failed': 'Error al montar',
+  'unloading': 'Descargando',
+} satisfies Record<PluginInventoryLocaleKey, string>
+
+/** fr dictionary, checked complete against the zh key set. */
+export const fr = {
+  'tab': 'Liste des plugins',
+  'loading': 'Lecture des plugins…',
+  'error': 'Les plugins sont temporairement indisponibles.',
+  'retry': 'Réessayer',
+  'search': 'Rechercher des plugins',
+  'catalog': 'Liste des plugins',
+  'empty': 'Aucun plugin disponible.',
+  'emptySearch': 'Aucun plugin correspondant.',
+  'enabledTag': 'Activé',
+  'disabledTag': 'Désactivé',
+  'configuration': 'Configuration',
+  'cordis': 'État Cordis',
+  'unobserved': 'Non monté',
+  'pending': 'En attente des dépendances',
+  'loadingPhase': 'Chargement',
+  'active': 'Monté',
+  'failed': 'Échec du montage',
+  'unloading': 'Déchargement',
+} satisfies Record<PluginInventoryLocaleKey, string>
+
+/** de dictionary, checked complete against the zh key set. */
+export const de = {
+  'tab': 'Plugin-Liste',
+  'loading': 'Plugins werden gelesen…',
+  'error': 'Plugins sind vorübergehend nicht verfügbar.',
+  'retry': 'Erneut versuchen',
+  'search': 'Plugins durchsuchen',
+  'catalog': 'Plugin-Liste',
+  'empty': 'Keine Plugins verfügbar.',
+  'emptySearch': 'Keine passenden Plugins.',
+  'enabledTag': 'Aktiviert',
+  'disabledTag': 'Deaktiviert',
+  'configuration': 'Konfiguration',
+  'cordis': 'Cordis-Status',
+  'unobserved': 'Nicht eingehängt',
+  'pending': 'Wartet auf Abhängigkeiten',
+  'loadingPhase': 'Wird geladen',
+  'active': 'Eingehängt',
+  'failed': 'Einbinden fehlgeschlagen',
+  'unloading': 'Wird entladen',
+} satisfies Record<PluginInventoryLocaleKey, string>
+
+/** ptBr dictionary, checked complete against the zh key set. */
+export const ptBr = {
+  'tab': 'Lista de plugins',
+  'loading': 'Lendo plugins…',
+  'error': 'Os plugins estão temporariamente indisponíveis.',
+  'retry': 'Tentar novamente',
+  'search': 'Pesquisar plugins',
+  'catalog': 'Lista de plugins',
+  'empty': 'Nenhum plugin disponível.',
+  'emptySearch': 'Nenhum plugin correspondente.',
+  'enabledTag': 'Ativado',
+  'disabledTag': 'Desativado',
+  'configuration': 'Configuração',
+  'cordis': 'Status do Cordis',
+  'unobserved': 'Não montado',
+  'pending': 'Aguardando dependências',
+  'loadingPhase': 'Carregando',
+  'active': 'Montado',
+  'failed': 'Falha ao montar',
+  'unloading': 'Descarregando',
+} satisfies Record<PluginInventoryLocaleKey, string>

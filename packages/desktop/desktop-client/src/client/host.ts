@@ -40,7 +40,7 @@ export interface DesktopHostService {
   stopRuntime(): Promise<void>
   /** Render a redacted diagnostics summary. */
   diagnostics(): Promise<Record<string, string>>
-  /** Rebuild the native menu with the resolved desktop language (en/it). */
+  /** Rebuild the native menu with the resolved desktop language (one of seven). */
   setMenuLanguage(language: string): Promise<void>
   /** Create a session in the current workspace (native New Session action). */
   newSession(): Promise<void>
@@ -87,13 +87,13 @@ export function apply(ctx: Context): void {
         }
         const response = await connection.api.settings.mutate({
           ns: 'locale',
-          ops: [{ op: 'set', path: ['preference'], value: 'en' }],
+          ops: [{ op: 'set', path: ['preference'], value: desktopLocale.get() }],
         })
         if (!response.result.ok) {
-          console.error('[desktop] failed to pin the upstream locale to English:', response.result.error)
+          console.error('[desktop] failed to pin the upstream locale:', response.result.error)
         }
       } catch (error) {
-        console.error('[desktop] failed to pin the upstream locale to English:', error)
+        console.error('[desktop] failed to pin the upstream locale:', error)
       }
     })()
   }
@@ -149,10 +149,12 @@ export function apply(ctx: Context): void {
       await connection.api.sessions.create({ workspaceId, sessionId: crypto.randomUUID() as SessionId })
     },
   }
-  // Desktop language policy: the upstream client ships English/Chinese
-  // dictionaries, so the upstream active locale stays pinned to English and
-  // Chinese is never the fallback for an unsupported macOS locale.
+  // Desktop language policy: the upstream client ships all seven dictionaries,
+  // so the upstream active locale follows the resolved desktop language. The
+  // desktop resolution maps unsupported macOS locales to English, which is
+  // therefore the only fallback.
   pinUpstreamLocale()
+  const unpinLanguage = desktopLocale.subscribe(() => { pinUpstreamLocale() })
   const unpin = ctx.on('connection/reset', () => { pinUpstreamLocale() })
   // Native menu actions: the WebView-owned ones route here; Settings opens
   // the desktop settings modal through a window event the overlay owns.
@@ -195,6 +197,7 @@ export function apply(ctx: Context): void {
     focusDispose()
     frameDispose()
     unpin()
+    unpinLanguage()
   }, 'desktop-host notifications')
   ctx.provide('desktopHost', service)
 }

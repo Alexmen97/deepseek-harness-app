@@ -1,4 +1,4 @@
-//! Native application menu: localized labels (English/Italian), conventional
+//! Native application menu: localized labels for the seven supported languages, conventional
 //! macOS shortcuts, and menu:// events for the WebView-owned actions.
 
 use tauri::menu::{MenuBuilder, MenuItemBuilder, PredefinedMenuItem, SubmenuBuilder};
@@ -113,8 +113,181 @@ const IT: Labels = Labels {
     licenses: "Licenze open source",
 };
 
+
+const ZH: Labels = Labels {
+    app: "Harness Desktop",
+    file: "文件",
+    edit: "编辑",
+    view: "显示",
+    session: "会话",
+    window: "窗口",
+    help: "帮助",
+    about: "关于 Harness Desktop",
+    settings: "设置…",
+    new_session: "新建会话",
+    open_workspace: "打开工作区…",
+    restart_harness: "重启 Harness",
+    show_logs: "显示日志",
+    attach_file: "附加图像…",
+    close_window: "关闭窗口",
+    fullscreen: "切换全屏",
+    undo: "撤销",
+    redo: "重做",
+    cut: "剪切",
+    copy: "复制",
+    paste: "粘贴",
+    select_all: "全选",
+    minimize: "最小化",
+    zoom: "缩放",
+    hide: "隐藏 Harness Desktop",
+    hide_others: "隐藏其他",
+    show_all: "全部显示",
+    quit: "退出 Harness Desktop",
+    repository: "DeepSeek Harness 仓库",
+    licenses: "开源许可证",
+};
+
+const ES: Labels = Labels {
+    app: "Harness Desktop",
+    file: "Archivo",
+    edit: "Edición",
+    view: "Vista",
+    session: "Sesión",
+    window: "Ventana",
+    help: "Ayuda",
+    about: "Acerca de Harness Desktop",
+    settings: "Ajustes…",
+    new_session: "Nueva sesión",
+    open_workspace: "Abrir área de trabajo…",
+    restart_harness: "Reiniciar Harness",
+    show_logs: "Mostrar registros",
+    attach_file: "Adjuntar imagen…",
+    close_window: "Cerrar ventana",
+    fullscreen: "Pantalla completa",
+    undo: "Deshacer",
+    redo: "Rehacer",
+    cut: "Cortar",
+    copy: "Copiar",
+    paste: "Pegar",
+    select_all: "Seleccionar todo",
+    minimize: "Minimizar",
+    zoom: "Zoom",
+    hide: "Ocultar Harness Desktop",
+    hide_others: "Ocultar otros",
+    show_all: "Mostrar todo",
+    quit: "Salir de Harness Desktop",
+    repository: "Repositorio de DeepSeek Harness",
+    licenses: "Licencias de código abierto",
+};
+
+const FR: Labels = Labels {
+    app: "Harness Desktop",
+    file: "Fichier",
+    edit: "Édition",
+    view: "Affichage",
+    session: "Session",
+    window: "Fenêtre",
+    help: "Aide",
+    about: "À propos de Harness Desktop",
+    settings: "Réglages…",
+    new_session: "Nouvelle session",
+    open_workspace: "Ouvrir l’espace de travail…",
+    restart_harness: "Redémarrer Harness",
+    show_logs: "Afficher les journaux",
+    attach_file: "Joindre une image…",
+    close_window: "Fermer la fenêtre",
+    fullscreen: "Plein écran",
+    undo: "Annuler",
+    redo: "Rétablir",
+    cut: "Couper",
+    copy: "Copier",
+    paste: "Coller",
+    select_all: "Tout sélectionner",
+    minimize: "Réduire",
+    zoom: "Zoom",
+    hide: "Masquer Harness Desktop",
+    hide_others: "Masquer les autres",
+    show_all: "Tout afficher",
+    quit: "Quitter Harness Desktop",
+    repository: "Dépôt DeepSeek Harness",
+    licenses: "Licences open source",
+};
+
+const DE: Labels = Labels {
+    app: "Harness Desktop",
+    file: "Datei",
+    edit: "Bearbeiten",
+    view: "Darstellung",
+    session: "Sitzung",
+    window: "Fenster",
+    help: "Hilfe",
+    about: "Über Harness Desktop",
+    settings: "Einstellungen…",
+    new_session: "Neue Sitzung",
+    open_workspace: "Arbeitsbereich öffnen…",
+    restart_harness: "Harness neu starten",
+    show_logs: "Protokolle anzeigen",
+    attach_file: "Bild anhängen…",
+    close_window: "Fenster schließen",
+    fullscreen: "Vollbild umschalten",
+    undo: "Widerrufen",
+    redo: "Wiederholen",
+    cut: "Ausschneiden",
+    copy: "Kopieren",
+    paste: "Einsetzen",
+    select_all: "Alles auswählen",
+    minimize: "Minimieren",
+    zoom: "Zoomen",
+    hide: "Harness Desktop ausblenden",
+    hide_others: "Andere ausblenden",
+    show_all: "Alle einblenden",
+    quit: "Harness Desktop beenden",
+    repository: "DeepSeek Harness Repository",
+    licenses: "Open-Source-Lizenzen",
+};
+
+const PT_BR: Labels = Labels {
+    app: "Harness Desktop",
+    file: "Arquivo",
+    edit: "Editar",
+    view: "Visualizar",
+    session: "Sessão",
+    window: "Janela",
+    help: "Ajuda",
+    about: "Sobre o Harness Desktop",
+    settings: "Ajustes…",
+    new_session: "Nova sessão",
+    open_workspace: "Abrir área de trabalho…",
+    restart_harness: "Reiniciar o Harness",
+    show_logs: "Mostrar registros",
+    attach_file: "Anexar imagem…",
+    close_window: "Fechar janela",
+    fullscreen: "Tela cheia",
+    undo: "Desfazer",
+    redo: "Refazer",
+    cut: "Recortar",
+    copy: "Copiar",
+    paste: "Colar",
+    select_all: "Selecionar tudo",
+    minimize: "Minimizar",
+    zoom: "Zoom",
+    hide: "Ocultar o Harness Desktop",
+    hide_others: "Ocultar outros",
+    show_all: "Mostrar tudo",
+    quit: "Sair do Harness Desktop",
+    repository: "Repositório do DeepSeek Harness",
+    licenses: "Licenças de código aberto",
+};
 fn labels(language: &str) -> &'static Labels {
-    if language == "it" { &IT } else { &EN }
+    match language {
+        "it" => &IT,
+        "zh" => &ZH,
+        "es" => &ES,
+        "fr" => &FR,
+        "de" => &DE,
+        "pt-BR" => &PT_BR,
+        _ => &EN,
+    }
 }
 
 /** Build the native menu for a language; menu:// ids name the WebView actions. */
@@ -199,5 +372,61 @@ pub fn handle_menu_event<R: Runtime>(app: &AppHandle<R>, id: &str) {
         "repository" => { let _ = crate::commands::open_in_system(DEEPSEEK_HARNESS_REPOSITORY); }
         "licenses" => { let _ = crate::commands::open_in_system(DEEPSEEK_HARNESS_LICENSES); }
         _ => {}
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::labels;
+    use crate::commands::MENU_LANGUAGES;
+
+    /// Every shipped language resolves to a label table whose application-owned
+    /// entries are all non-empty; unknown ids fall back to English.
+    #[test]
+    fn every_shipped_language_has_complete_menu_labels() {
+        let representative = [
+            "file", "session", "window", "help", "settings", "new_session",
+            "open_workspace", "restart_harness", "show_logs", "attach_file",
+            "close_window", "quit", "repository", "licenses",
+        ];
+        for language in MENU_LANGUAGES {
+            let table = labels(language);
+            for field in representative {
+                let value = match field {
+                    "file" => table.file,
+                    "session" => table.session,
+                    "window" => table.window,
+                    "help" => table.help,
+                    "settings" => table.settings,
+                    "new_session" => table.new_session,
+                    "open_workspace" => table.open_workspace,
+                    "restart_harness" => table.restart_harness,
+                    "show_logs" => table.show_logs,
+                    "attach_file" => table.attach_file,
+                    "close_window" => table.close_window,
+                    "quit" => table.quit,
+                    "repository" => table.repository,
+                    "licenses" => table.licenses,
+                    _ => unreachable!(),
+                };
+                assert!(!value.is_empty(), "{language}: {field} is empty");
+            }
+        }
+        assert_eq!(labels("nl").settings, labels("en").settings);
+    }
+
+    /// The seven tables are pairwise distinct where they translate app-owned copy.
+    #[test]
+    fn shipped_language_tables_are_distinct() {
+        for (index, language) in MENU_LANGUAGES.iter().enumerate() {
+            let table = labels(language);
+            for other in &MENU_LANGUAGES[index + 1..] {
+                let other_table = labels(other);
+                assert_ne!(
+                    table.new_session, other_table.new_session,
+                    "{language} and {other} must not share the New Session label"
+                );
+            }
+        }
     }
 }

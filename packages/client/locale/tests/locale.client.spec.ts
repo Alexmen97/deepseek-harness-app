@@ -159,7 +159,7 @@ describe('LocaleRuntime', () => {
 
   it('throws on unknown locale ids', () => {
     const { svc } = make()
-    expect(() => { svc.setLocale('fr') }).toThrow('not registered')
+    expect(() => { svc.setLocale('nl') }).toThrow('not registered')
   })
 
   it('adopts a Host preference over the browser language without writing it back', () => {
@@ -197,9 +197,17 @@ describe('LocaleRuntime', () => {
     expect(make().svc.getLocale().active).toBe('en')
     stubLanguages('zh-Hant-TW')
     expect(make().svc.getLocale().active).toBe('zh')
-    // An unshipped language walks the list to the first one this app ships.
     stubLanguages('fr-FR', 'en-US')
-    expect(make().svc.getLocale().active).toBe('en')
+    expect(make().svc.getLocale().active).toBe('fr')
+    stubLanguages('de-AT')
+    expect(make().svc.getLocale().active).toBe('de')
+    stubLanguages('it-IT')
+    expect(make().svc.getLocale().active).toBe('it')
+    stubLanguages('es-MX')
+    expect(make().svc.getLocale().active).toBe('es')
+    // Every Portuguese variant maps to the shipped Brazilian Portuguese.
+    stubLanguages('pt-PT')
+    expect(make().svc.getLocale().active).toBe('pt-BR')
     // Only `language` populated: an empty ordered list, and a host that
     // exposes no `languages` property at all.
     vi.stubGlobal('navigator', { languages: [], language: 'en-US' })
@@ -208,7 +216,7 @@ describe('LocaleRuntime', () => {
     expect(make().svc.getLocale().active).toBe('en')
     // No shipped language anywhere in the browser's preferences: zh remains
     // the product default rather than an arbitrary near-match.
-    stubLanguages('fr-FR', 'de')
+    stubLanguages('nl-NL', 'ko-KR')
     expect(make().svc.getLocale().active).toBe('zh')
   })
 
@@ -230,11 +238,16 @@ describe('LocaleRuntime', () => {
     expect(svc.getLocale().active).toBe('zh')
   })
 
-  it('exposes the two shipped locales with self-described labels', () => {
+  it('exposes the seven shipped locales with self-described labels', () => {
     const { svc } = make()
     expect(svc.getLocale().locales).toEqual([
       { id: 'zh', label: '中文' },
       { id: 'en', label: 'English' },
+      { id: 'it', label: 'Italiano' },
+      { id: 'es', label: 'Español' },
+      { id: 'fr', label: 'Français' },
+      { id: 'de', label: 'Deutsch' },
+      { id: 'pt-BR', label: 'Português (Brasil)' },
     ])
   })
 })

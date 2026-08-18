@@ -62,3 +62,95 @@ export const en: Record<TrajectoryKey, string> = {
   'toolbar.search': 'Search trajectory',
   'toolbar.searchPlaceholder': 'Search',
 }
+
+/** Italian dictionary, complete against the canonical key set. */
+export const it = {
+  'view.trajectory': 'Traiettoria',
+  'toolbar.aria': 'Barra strumenti traiettoria',
+  'toolbar.duration': 'Durata',
+  'toolbar.useActualDuration': 'Usa durata effettiva',
+  'toolbar.useEqualWidth': 'Usa operazioni a larghezza uniforme',
+  'toolbar.actualTime': 'Tempo effettivo',
+  'toolbar.turns': 'Turni',
+  'toolbar.expandTurns': 'Espandi turni',
+  'toolbar.collapseTurns': 'Comprimi turni',
+  'toolbar.calls': 'Chiamate',
+  'toolbar.expandCalls': 'Espandi chiamate',
+  'toolbar.collapseCalls': 'Comprimi chiamate',
+  'toolbar.search': 'Cerca nella traiettoria',
+  'toolbar.searchPlaceholder': 'Cerca',
+} satisfies Record<TrajectoryKey, string>
+
+/** es dictionary, checked complete against the zh key set. */
+export const es = {
+  'view.trajectory': 'Trayectoria',
+  'toolbar.aria': 'Barra de herramientas de trayectoria',
+  'toolbar.duration': 'Duración',
+  'toolbar.useActualDuration': 'Usar duración real',
+  'toolbar.useEqualWidth': 'Usar operaciones de ancho uniforme',
+  'toolbar.actualTime': 'Tiempo real',
+  'toolbar.turns': 'Turnos',
+  'toolbar.expandTurns': 'Expandir turnos',
+  'toolbar.collapseTurns': 'Contraer turnos',
+  'toolbar.calls': 'Llamadas',
+  'toolbar.expandCalls': 'Expandir llamadas',
+  'toolbar.collapseCalls': 'Contraer llamadas',
+  'toolbar.search': 'Buscar en la trayectoria',
+  'toolbar.searchPlaceholder': 'Buscar',
+} satisfies Record<TrajectoryKey, string>
+
+/** fr dictionary, checked complete against the zh key set. */
+export const fr = {
+  'view.trajectory': 'Trajectoire',
+  'toolbar.aria': 'Barre d’outils de trajectoire',
+  'toolbar.duration': 'Durée',
+  'toolbar.useActualDuration': 'Utiliser la durée réelle',
+  'toolbar.useEqualWidth': 'Utiliser des opérations de largeur égale',
+  'toolbar.actualTime': 'Temps réel',
+  'toolbar.turns': 'Tours',
+  'toolbar.expandTurns': 'Développer les tours',
+  'toolbar.collapseTurns': 'Réduire les tours',
+  'toolbar.calls': 'Appels',
+  'toolbar.expandCalls': 'Développer les appels',
+  'toolbar.collapseCalls': 'Réduire les appels',
+  'toolbar.search': 'Rechercher dans la trajectoire',
+  'toolbar.searchPlaceholder': 'Rechercher',
+} satisfies Record<TrajectoryKey, string>
+
+/** de dictionary, checked complete against the zh key set. */
+export const de = {
+  'view.trajectory': 'Verlauf',
+  'toolbar.aria': 'Verlaufs-Symbolleiste',
+  'toolbar.duration': 'Dauer',
+  'toolbar.useActualDuration': 'Tatsächliche Dauer verwenden',
+  'toolbar.useEqualWidth': 'Gleich breite Operationen verwenden',
+  'toolbar.actualTime': 'Tatsächliche Zeit',
+  'toolbar.turns': 'Runden',
+  'toolbar.expandTurns': 'Runden erweitern',
+  'toolbar.collapseTurns': 'Runden einklappen',
+  'toolbar.calls': 'Aufrufe',
+  'toolbar.expandCalls': 'Aufrufe erweitern',
+  'toolbar.collapseCalls': 'Aufrufe einklappen',
+  'toolbar.search': 'Verlauf durchsuchen',
+  'toolbar.searchPlaceholder': 'Suchen',
+} satisfies Record<TrajectoryKey, string>
+
+/** ptBr dictionary, checked complete against the zh key set. */
+export const ptBr = {
+  'view.trajectory': 'Trajetória',
+  'toolbar.aria': 'Barra de ferramentas da trajetória',
+  'toolbar.duration': 'Duração',
+  'toolbar.useActualDuration': 'Usar duração real',
+  'toolbar.useEqualWidth': 'Usar operações de largura igual',
+  'toolbar.actualTime': 'Tempo real',
+  'toolbar.turns': 'Turnos',
+  'toolbar.expandTurns': 'Expandir turnos',
+  'toolbar.collapseTurns': 'Recolher turnos',
+  'toolbar.calls': 'Chamadas',
+  'toolbar.expandCalls': 'Expandir chamadas',
+  'toolbar.collapseCalls': 'Recolher chamadas',
+  'toolbar.search': 'Pesquisar na trajetória',
+  'toolbar.searchPlaceholder': 'Pesquisar',
+} satisfies Record<TrajectoryKey, string>
+
+/** it dictionary, checked complete against the zh key set. */

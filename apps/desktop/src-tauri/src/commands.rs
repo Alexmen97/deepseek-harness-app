@@ -9,6 +9,12 @@ use tauri::{Manager, State};
 
 use crate::manager::{self, RuntimeManager, RuntimeState};
 
+/// Managed holder for the resolved application language (menu and About window).
+pub struct LanguageState(pub std::sync::Mutex<String>);
+
+/// The seven application languages the native surfaces serve.
+pub const MENU_LANGUAGES: [&str; 7] = ["en", "zh", "it", "es", "fr", "de", "pt-BR"];
+
 /// Upstream attachment-local defaults mirrored by the native picker
 /// (packages/attachment/attachment-local/src/index.ts).
 const ATTACHMENT_MAX_IMAGE_BYTES: usize = 5 * 1024 * 1024;
@@ -214,14 +220,17 @@ pub fn diagnostics(manager: State<'_, RuntimeManager>, app: tauri::AppHandle) ->
     manager::diagnostics_summary(&manager, &app)
 }
 
-/// Rebuild the native menu with the resolved desktop language (en/it).
+/// Rebuild the native menu with the resolved desktop language (one of the seven).
 #[tauri::command]
-pub fn menu_set_language(app: tauri::AppHandle, language: String) -> Result<(), String> {
-    if language != "en" && language != "it" {
+pub fn menu_set_language(app: tauri::AppHandle, state: State<'_, LanguageState>, language: String) -> Result<(), String> {
+    if !MENU_LANGUAGES.contains(&language.as_str()) {
         return Err(format!("unsupported menu language {language:?}"));
     }
     let menu = crate::menu::build_menu(&app, &language).map_err(|error| error.to_string())?;
     app.set_menu(menu).map_err(|error| error.to_string())?;
+    if let Ok(mut current) = state.0.lock() {
+        *current = language;
+    }
     Ok(())
 }
 
@@ -233,16 +242,19 @@ pub struct AboutInfo {
     pub protocol_version: u32,
     pub architecture: String,
     pub git: Option<String>,
+    pub language: String,
 }
 
 #[tauri::command]
-pub fn about_info() -> AboutInfo {
+pub fn about_info(state: State<'_, LanguageState>) -> AboutInfo {
+    let language = state.0.lock().map(|current| current.clone()).unwrap_or_else(|_| "en".to_string());
     AboutInfo {
         desktop_version: env!("CARGO_PKG_VERSION").to_string(),
         harness_version: manager::HARNESS_VERSION.to_string(),
         protocol_version: manager::DESKTOP_PROTOCOL_VERSION,
         architecture: std::env::consts::ARCH.to_string(),
         git: option_env!("DSH_DESKTOP_GIT").map(String::from),
+        language,
     }
 }
 

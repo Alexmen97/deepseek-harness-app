@@ -49,3 +49,115 @@ export const accessEn = {
   'confirm.cancel': 'Cancel',
   'confirm.enable': 'Enable Full access',
 } satisfies Record<PermissionAccessKey, string>
+
+/** Italian dictionary, complete against the canonical key set. */
+export const it = {
+  'title': 'Permessi',
+  'description': 'Scegli la modalità di permesso predefinita per le nuove sessioni',
+  'loading': 'Caricamento',
+  'unavailable': 'Non disponibile',
+  'confirm.title': 'Abilitare Full access?',
+  'confirm.description': 'Full access consente alle nuove sessioni di ridurre i passaggi di conferma ed eseguire più azioni direttamente, incluse operazioni sensibili, modifiche ai file o comandi esterni. Usalo solo se ti fidi delle attività successive.',
+  'confirm.acknowledge': 'Ho capito i rischi e voglio continuare',
+  'confirm.cancel': 'Annulla',
+  'confirm.enable': 'Abilita Full access',
+} satisfies Record<PermissionSettingsKey, string>
+
+/** es dictionary, checked complete against the zh key set. */
+export const es = {
+  'title': 'Permisos',
+  'description': 'Elige el modo de permisos predeterminado para las sesiones nuevas',
+  'loading': 'Cargando',
+  'unavailable': 'No disponible',
+  'confirm.title': '¿Habilitar Full access?',
+  'confirm.description': 'Full access permite que las sesiones nuevas reduzcan los pasos de confirmación y realicen más acciones directamente, incluidas operaciones sensibles, cambios de archivos o comandos externos. Úsalo solo cuando confíes en las tareas siguientes.',
+  'confirm.acknowledge': 'Entiendo los riesgos y quiero continuar',
+  'confirm.cancel': 'Cancelar',
+  'confirm.enable': 'Habilitar Full access',
+} satisfies Record<PermissionSettingsKey, string>
+
+/** fr dictionary, checked complete against the zh key set. */
+export const fr = {
+  'title': 'Permissions',
+  'description': 'Choisissez le mode de permission par défaut des nouvelles sessions',
+  'loading': 'Chargement',
+  'unavailable': 'Indisponible',
+  'confirm.title': 'Activer Full access ?',
+  'confirm.description': 'Full access permet aux nouvelles sessions de réduire les étapes de confirmation et d’effectuer davantage d’actions directement, y compris des opérations sensibles, des modifications de fichiers ou des commandes externes. Ne l’utilisez que si vous faites confiance aux tâches suivantes.',
+  'confirm.acknowledge': 'Je comprends les risques et je souhaite continuer',
+  'confirm.cancel': 'Annuler',
+  'confirm.enable': 'Activer Full access',
+} satisfies Record<PermissionSettingsKey, string>
+
+/** de dictionary, checked complete against the zh key set. */
+export const de = {
+  'title': 'Berechtigungen',
+  'description': 'Standard-Berechtigungsmodus für neue Sitzungen wählen',
+  'loading': 'Wird geladen',
+  'unavailable': 'Nicht verfügbar',
+  'confirm.title': 'Full access aktivieren?',
+  'confirm.description': 'Mit Full access reduzieren neue Sitzungen Bestätigungsschritte und führen mehr Aktionen direkt aus, einschließlich sensibler Vorgänge, Dateiänderungen oder externer Befehle. Nur verwenden, wenn Sie den nachfolgenden Aufgaben vertrauen.',
+  'confirm.acknowledge': 'Ich verstehe die Risiken und möchte fortfahren',
+  'confirm.cancel': 'Abbrechen',
+  'confirm.enable': 'Full access aktivieren',
+} satisfies Record<PermissionSettingsKey, string>
+
+/** ptBr dictionary, checked complete against the zh key set. */
+export const ptBr = {
+  'title': 'Permissões',
+  'description': 'Escolha o modo de permissão padrão para novas sessões',
+  'loading': 'Carregando',
+  'unavailable': 'Indisponível',
+  'confirm.title': 'Ativar Full access?',
+  'confirm.description': 'O Full access permite que novas sessões reduzam as etapas de confirmação e executem mais ações diretamente, incluindo operações sensíveis, alterações de arquivos ou comandos externos. Use somente quando confiar nas tarefas seguintes.',
+  'confirm.acknowledge': 'Entendo os riscos e quero continuar',
+  'confirm.cancel': 'Cancelar',
+  'confirm.enable': 'Ativar Full access',
+} satisfies Record<PermissionSettingsKey, string>
+
+/** accessIt dictionary, checked complete against the zh key set. */
+export const accessIt = {
+  'confirm.title': 'Abilitare Full access?',
+  'confirm.description': 'Full access riduce i passaggi di conferma e consente all’agente di eseguire più azioni direttamente, incluse operazioni sensibili, modifiche ai file o comandi esterni. Usalo solo se ti fidi dell’attività corrente.',
+  'confirm.acknowledge': 'Ho capito i rischi e voglio continuare',
+  'confirm.cancel': 'Annulla',
+  'confirm.enable': 'Abilita Full access',
+} satisfies Record<PermissionAccessKey, string>
+
+/** accessEs dictionary, checked complete against the zh key set. */
+export const accessEs = {
+  'confirm.title': '¿Habilitar Full access?',
+  'confirm.description': 'Full access reduce los pasos de confirmación y permite que el agente realice más acciones directamente, incluidas operaciones sensibles, cambios de archivos o comandos externos. Úsalo solo cuando confíes en la tarea actual.',
+  'confirm.acknowledge': 'Entiendo los riesgos y quiero continuar',
+  'confirm.cancel': 'Cancelar',
+  'confirm.enable': 'Habilitar Full access',
+} satisfies Record<PermissionAccessKey, string>
+
+/** accessFr dictionary, checked complete against the zh key set. */
+export const accessFr = {
+  'confirm.title': 'Activer Full access ?',
+  'confirm.description': 'Full access réduit les étapes de confirmation et permet à l’agent d’effectuer davantage d’actions directement, y compris des opérations sensibles, des modifications de fichiers ou des commandes externes. Ne l’utilisez que si vous faites confiance à la tâche actuelle.',
+  'confirm.acknowledge': 'Je comprends les risques et je souhaite continuer',
+  'confirm.cancel': 'Annuler',
+  'confirm.enable': 'Activer Full access',
+} satisfies Record<PermissionAccessKey, string>
+
+/** accessDe dictionary, checked complete against the zh key set. */
+export const accessDe = {
+  'confirm.title': 'Full access aktivieren?',
+  'confirm.description': 'Mit Full access reduziert der Agent Bestätigungsschritte und führt mehr Aktionen direkt aus, einschließlich sensibler Vorgänge, Dateiänderungen oder externer Befehle. Nur verwenden, wenn Sie der aktuellen Aufgabe vertrauen.',
+  'confirm.acknowledge': 'Ich verstehe die Risiken und möchte fortfahren',
+  'confirm.cancel': 'Abbrechen',
+  'confirm.enable': 'Full access aktivieren',
+} satisfies Record<PermissionAccessKey, string>
+
+/** accessPtBr dictionary, checked complete against the zh key set. */
+export const accessPtBr = {
+  'confirm.title': 'Ativar Full access?',
+  'confirm.description': 'O Full access reduz as etapas de confirmação e permite que o agente execute mais ações diretamente, incluindo operações sensíveis, alterações de arquivos ou comandos externos. Use somente quando confiar na tarefa atual.',
+  'confirm.acknowledge': 'Entendo os riscos e quero continuar',
+  'confirm.cancel': 'Cancelar',
+  'confirm.enable': 'Ativar Full access',
+} satisfies Record<PermissionAccessKey, string>
+
+/** it dictionary, checked complete against the zh key set. */

@@ -14,13 +14,18 @@ import { desktopPalette, useDesktopAppearance, useDesktopStrings } from './strin
 
 const CREDENTIAL_REF = 'DEEPSEEK_API_KEY'
 
-/** The shared language selector (System / English / Italiano). */
+/** The shared language selector (System plus the seven shipped languages). */
 export function LanguageSelect(props: { setting: DesktopLanguageSetting; onSelect(next: DesktopLanguageSetting): void }): ReactElement {
   const { t } = useDesktopStrings()
   const options: Array<{ id: DesktopLanguageSetting; label: string }> = [
     { id: 'system', label: t('settings.language.system') },
     { id: 'en', label: t('settings.language.english') },
+    { id: 'zh', label: t('settings.language.chinese') },
     { id: 'it', label: t('settings.language.italian') },
+    { id: 'es', label: t('settings.language.spanish') },
+    { id: 'fr', label: t('settings.language.french') },
+    { id: 'de', label: t('settings.language.german') },
+    { id: 'pt-BR', label: t('settings.language.portuguese') },
   ]
   return (
     <select

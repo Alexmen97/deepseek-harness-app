@@ -1,5 +1,5 @@
 /**
- * Desktop settings plugin: the General Language row (System/English/Italiano)
+ * Desktop settings plugin: the General Language row (System plus seven languages)
  * and the Advanced section (versions, runtime state, Restart Harness, Open
  * Logs, Copy Diagnostics with secrets removed).
  *
@@ -27,7 +27,7 @@ interface LanguageRowInjected {
   setSetting(next: DesktopLanguageSetting): Promise<void>
 }
 
-/** The General Language row: System / English / Italiano. */
+/** The General Language row: System plus the seven shipped languages. */
 function DesktopLanguageRow(props: {
   getSetting(): DesktopLanguageSetting
   setSetting(next: DesktopLanguageSetting): Promise<void>
@@ -38,7 +38,12 @@ function DesktopLanguageRow(props: {
   const options: Array<{ id: DesktopLanguageSetting; label: string }> = [
     { id: 'system', label: t('settings.language.system') },
     { id: 'en', label: t('settings.language.english') },
+    { id: 'zh', label: t('settings.language.chinese') },
     { id: 'it', label: t('settings.language.italian') },
+    { id: 'es', label: t('settings.language.spanish') },
+    { id: 'fr', label: t('settings.language.french') },
+    { id: 'de', label: t('settings.language.german') },
+    { id: 'pt-BR', label: t('settings.language.portuguese') },
   ]
   return (
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.45rem 0' }}>

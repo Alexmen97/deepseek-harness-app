@@ -28,7 +28,7 @@ import type { PermissionSelect } from '@deepseek-ai/dsh-permission-presets/clien
 import { PermissionRow } from './PermissionRow.tsx'
 import type { PermissionRowInjected } from './PermissionRow.tsx'
 import {
-  accessEn, accessZh, en, zh,
+  accessDe, accessEn, accessEs, accessFr, accessIt, accessPtBr, accessZh, de, en, es, fr, it, ptBr, zh,
 } from './locales.ts'
 import {
   displayPermissionPreset, FULL_ACCESS_PRESET,
@@ -102,6 +102,41 @@ export function apply(ctx: ClientContext): void {
         'confirm.cancel': accessEn['confirm.cancel'],
         'confirm.enable': accessEn['confirm.enable'],
       }),
+      ctx.locale.register(ACCESS_NS, 'it', {
+        'confirm.title': accessIt['confirm.title'],
+        'confirm.description': accessIt['confirm.description'],
+        'confirm.acknowledge': accessIt['confirm.acknowledge'],
+        'confirm.cancel': accessIt['confirm.cancel'],
+        'confirm.enable': accessIt['confirm.enable'],
+      }),
+      ctx.locale.register(ACCESS_NS, 'es', {
+        'confirm.title': accessEs['confirm.title'],
+        'confirm.description': accessEs['confirm.description'],
+        'confirm.acknowledge': accessEs['confirm.acknowledge'],
+        'confirm.cancel': accessEs['confirm.cancel'],
+        'confirm.enable': accessEs['confirm.enable'],
+      }),
+      ctx.locale.register(ACCESS_NS, 'fr', {
+        'confirm.title': accessFr['confirm.title'],
+        'confirm.description': accessFr['confirm.description'],
+        'confirm.acknowledge': accessFr['confirm.acknowledge'],
+        'confirm.cancel': accessFr['confirm.cancel'],
+        'confirm.enable': accessFr['confirm.enable'],
+      }),
+      ctx.locale.register(ACCESS_NS, 'de', {
+        'confirm.title': accessDe['confirm.title'],
+        'confirm.description': accessDe['confirm.description'],
+        'confirm.acknowledge': accessDe['confirm.acknowledge'],
+        'confirm.cancel': accessDe['confirm.cancel'],
+        'confirm.enable': accessDe['confirm.enable'],
+      }),
+      ctx.locale.register(ACCESS_NS, 'pt-BR', {
+        'confirm.title': accessPtBr['confirm.title'],
+        'confirm.description': accessPtBr['confirm.description'],
+        'confirm.acknowledge': accessPtBr['confirm.acknowledge'],
+        'confirm.cancel': accessPtBr['confirm.cancel'],
+        'confirm.enable': accessPtBr['confirm.enable'],
+      }),
     ]
     return () => { for (const dispose of disposers) dispose() }
   }, 'ui-permission: Full access confirmation dictionaries')
@@ -110,7 +145,7 @@ export function apply(ctx: ClientContext): void {
   const sessionFor = (session: ClientSessionContext): SessionFace | undefined =>
     sessions.binding(session.sessionId)?.session
 
-  ctx.effect(() => ctx.locale.register('settings.permission', { zh, en }), 'ui-permission: settings row dictionaries')
+  ctx.effect(() => ctx.locale.register('settings.permission', { zh, en, it, es, fr, de, 'pt-BR': ptBr }), 'ui-permission: settings row dictionaries')
 
   const connection = ctx.get('connection') as ConnectionHandle
   const controller = new PermissionPresetSettingsController(connection.api)

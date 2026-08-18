@@ -1,8 +1,8 @@
 /**
- * Desktop language store: the System/English/Italiano preference and its
- * resolved two-letter language. Desktop-only strings translate through this
- * store; the upstream UI locale stays pinned to English by the desktop host
- * (the upstream client ships English/Chinese dictionaries only).
+ * Desktop language store: the System preference plus the seven shipped
+ * languages and its resolved language. Desktop-only strings translate
+ * through this store; the upstream UI locale follows the resolved language
+ * (the upstream client ships all seven dictionaries).
  *
  * @module @deepseek-ai/dsh-desktop-client/locale
  */
@@ -10,9 +10,12 @@
 import { desktopBindings } from './transport.ts'
 
 /** The persisted preference identifier values. */
-export type DesktopLanguageSetting = 'system' | 'en' | 'it'
-/** The resolved two-letter language (never 'system'). */
-export type DesktopLanguage = 'en' | 'it'
+export type DesktopLanguageSetting = 'system' | 'en' | 'zh' | 'it' | 'es' | 'fr' | 'de' | 'pt-BR'
+/** One resolved language (never 'system'). */
+export type DesktopLanguage = Exclude<DesktopLanguageSetting, 'system'>
+
+/** The seven supported application languages in display order. */
+export const SUPPORTED_DESKTOP_LANGUAGES: readonly DesktopLanguage[] = ['en', 'zh', 'it', 'es', 'fr', 'de', 'pt-BR']
 
 /** Desktop preference key carrying the language setting. */
 export const LANGUAGE_PREFERENCE = 'language' as const
@@ -20,14 +23,25 @@ export const LANGUAGE_PREFERENCE = 'language' as const
 type LanguageListener = (language: DesktopLanguage, setting: DesktopLanguageSetting) => void
 
 /**
- * System language resolution: Italian macOS resolves to Italian, everything
- * else English. Chinese is never a desktop fallback.
+ * System language resolution from a macOS locale tag: regional variants map
+ * to their shipped language, every Portuguese variant maps to Brazilian
+ * Portuguese, Chinese variants follow the upstream zh model, and anything
+ * else resolves to English. English is the only desktop fallback.
  * @param primary - the first navigator language, or undefined when unavailable.
  * @returns the resolved desktop language.
  */
 export function resolveSystemLanguage(primary: string | undefined): DesktopLanguage {
   if (primary === undefined) return 'en'
-  return primary.toLowerCase().startsWith('it') ? 'it' : 'en'
+  const subtag = primary.toLowerCase().split('-')[0] ?? ''
+  switch (subtag) {
+    case 'zh': return 'zh'
+    case 'it': return 'it'
+    case 'es': return 'es'
+    case 'fr': return 'fr'
+    case 'de': return 'de'
+    case 'pt': return 'pt-BR'
+    default: return 'en'
+  }
 }
 
 class DesktopLocale {
@@ -40,8 +54,8 @@ class DesktopLocale {
   init(): Promise<void> {
     this.loaded ??= desktopBindings().host.prefsGet(LANGUAGE_PREFERENCE)
       .then((value) => {
-        if (value === 'en' || value === 'it' || value === 'system') {
-          this.setting = value
+        if (value !== undefined && (value === 'system' || (SUPPORTED_DESKTOP_LANGUAGES as readonly string[]).includes(value))) {
+          this.setting = value as DesktopLanguageSetting
           this.resolved = this.resolve()
           for (const listener of [...this.listeners]) listener(this.resolved, this.setting)
         }

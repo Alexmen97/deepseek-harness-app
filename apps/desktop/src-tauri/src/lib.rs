@@ -10,6 +10,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_notification::init())
         .setup(|app| {
+            app.manage(commands::LanguageState(std::sync::Mutex::new("en".to_string())));
             // The window is built here so the navigation policy can attach.
             // Production loads only the app origin; external links open in
             // the system browser (docs/desktop/CSP-EVAL-AUDIT.md).

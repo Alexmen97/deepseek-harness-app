@@ -21,9 +21,10 @@ import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import {
   LOCALE_PREFERENCE_FIELD, LOCALE_SETTINGS_NAMESPACE, type LocaleId, type LocaleSettings,
 } from '../locale-settings.ts'
-import { en, zh, type CommonKey } from '../locales/index.ts'
+import { de, en, es, fr, it, ptBr, zh, type CommonKey } from '../locales/index.ts'
 import {
-  en as settingsEn, zh as settingsZh, type SettingsLocaleKey,
+  de as settingsDe, en as settingsEn, es as settingsEs, fr as settingsFr, it as settingsIt, ptBr as settingsPtBr,
+  zh as settingsZh, type SettingsLocaleKey,
 } from '../locales/settings.ts'
 import type { LanguageRowInjected } from './LanguageRow.tsx'
 import { LanguageRow } from './LanguageRow.tsx'
@@ -95,10 +96,15 @@ export const COMMON_NS = 'common'
 /** Namespace owning this feature's settings-row copy. */
 export const SETTINGS_NS = 'settings.locale'
 
-/** The two shipped locales. */
+/** The seven shipped locales in display order (zh first per the repo convention). */
 const LOCALES: readonly LocaleDefinition[] = Object.freeze([
   { id: 'zh', label: '中文' },
   { id: 'en', label: 'English' },
+  { id: 'it', label: 'Italiano' },
+  { id: 'es', label: 'Español' },
+  { id: 'fr', label: 'Français' },
+  { id: 'de', label: 'Deutsch' },
+  { id: 'pt-BR', label: 'Português (Brasil)' },
 ])
 
 /**
@@ -337,6 +343,7 @@ function detectBrowserLocale(): LocaleId | undefined {
    * throw at boot. */
   for (const tag of [...(navigator.languages ?? []), navigator.language]) {
     const primary = tag.toLowerCase().split('-')[0]
+    if (primary === 'pt') return 'pt-BR'
     const match = LOCALES.find(locale => locale.id === primary)
     if (match) return match.id
   }
@@ -355,8 +362,8 @@ export const inject = ['slots', 'connection', 'remote', 'settingsScope']
 export function apply(ctx: ClientContext): void {
   const host = ctx.settingsScope.bind<LocaleSettings>({ namespace: LOCALE_SETTINGS_NAMESPACE })
   const locale = new LocaleRuntime(ctx, host)
-  locale.register(COMMON_NS, { zh, en })
-  locale.register(SETTINGS_NS, { zh: settingsZh, en: settingsEn })
+  locale.register(COMMON_NS, { zh, en, it, es, fr, de, 'pt-BR': ptBr })
+  locale.register(SETTINGS_NS, { zh: settingsZh, en: settingsEn, it: settingsIt, es: settingsEs, fr: settingsFr, de: settingsDe, 'pt-BR': settingsPtBr })
   ctx.provide('locale', locale)
   // The service IS the LocaleFace (bind + getSnapshot/subscribe): install it
   // so the render machinery can synthesize the `t` standard seat.
