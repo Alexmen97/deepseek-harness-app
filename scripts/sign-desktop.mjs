@@ -1,12 +1,12 @@
 /**
  * Release signing pipeline for Harness Desktop.app.
  *
- * The bundled runtime keeps its build-time signature (pkg signs the SEA with
- * Hardened Runtime) and is only VERIFIED here: re-signing a pkg executable
- * corrupts the embedded snapshot. The application is signed with Hardened
- * Runtime. Without Developer ID credentials the pipeline signs ad-hoc for
- * local development and reports NOTARIZATION SKIPPED — it never reports a
- * fake success.
+ * The bundled runtime keeps its build-time signature (pkg signs the SEA
+ * ad-hoc) and is only VERIFIED here: re-signing a pkg executable corrupts
+ * the embedded snapshot. The application is signed with Hardened Runtime.
+ * Without Developer ID credentials the pipeline signs ad-hoc for local
+ * development and reports NOTARIZATION SKIPPED — it never reports a fake
+ * success.
  *
  * Usage:
  *   node scripts/sign-desktop.mjs [--mode adhoc-hardened|developer-id] [--app path]

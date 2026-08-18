@@ -7,9 +7,11 @@ Every executable and native artifact inside Harness Desktop.app. The audit is re
 | Path | Architecture | Purpose | Signing strategy | Entitlements |
 |---|---|---|---|---|
 | Contents/MacOS/harness-desktop | arm64 | The Tauri application | Signed after the sidecar (outside-in finish) | Hardened Runtime, allow-jit (WebKit) |
-| Contents/Resources/sidecar/dsh-desktop-runtime | arm64 | The packaged Harness runtime (Node SEA) | Build-time pkg signature (Hardened Runtime), verified but never re-signed | none |
+| Contents/Resources/sidecar/dsh-desktop-runtime | arm64 | The packaged Harness runtime (Node SEA) | Build-time pkg signature (ad-hoc; the M3.3 audit shows no Hardened Runtime flag), verified but never re-signed | none |
 
 The runtime's native dependencies (sharp/libvips images, node-pty helpers) live inside the single-executable snapshot, not as separate bundle files, so they are covered by the sidecar signature. Re-signing a pkg executable corrupts the embedded snapshot (the spike reproduced a V8 CodeRange abort), so the pipeline verifies the sidecar signature and never re-signs it.
+
+The M3.3 codesign audit found the sidecar signature is ad-hoc without the Hardened Runtime flag. Before the first notarized release, the Developer ID milestone must spike a build-time hardened-runtime signature for the SEA and rerun the keyless acceptance matrix; if signing after blob injection reproduces the snapshot corruption, the fallback is to confirm with notarytool whether the ad-hoc nested signature is accepted and document that verdict instead.
 
 ## Verification commands
 

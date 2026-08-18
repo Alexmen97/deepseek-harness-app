@@ -6,7 +6,7 @@ The hardened-runtime configuration is deliberately minimal. One entitlement is d
 
 WebKit needs its JIT tier in the WebView process; the hardened runtime denies writable+executable memory without this entitlement. Tauri's macOS signing guidance prescribes allow-jit for WebView apps. The app carries it.
 
-The bundled runtime carries no entitlements: pkg signs the SEA itself with Hardened Runtime, and the keyless acceptance suite runs the full tool execution matrix against that signature. Re-signing the SEA is forbidden — it corrupts the embedded snapshot (docs/desktop/NESTED-CODE.md).
+The bundled runtime carries no entitlements: pkg signs the SEA itself (ad-hoc, no Hardened Runtime flag as audited in M3.3), and the keyless acceptance suite runs the full tool execution matrix against that signature. Re-signing the SEA is forbidden — it corrupts the embedded snapshot (docs/desktop/NESTED-CODE.md). The Developer ID milestone owns the hardened-runtime spike for the SEA before the first notarized release.
 
 ## Explicitly NOT declared
 

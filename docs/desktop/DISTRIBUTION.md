@@ -4,7 +4,7 @@ Reference for the signing, notarization, and DMG pipeline. Secrets never enter t
 
 ## Signing model
 
-Inside-out: scripts/sign-desktop.mjs signs the bundled runtime first, then the application, both with Hardened Runtime. No codesign --deep. The only entitlement is allow-jit (docs/desktop/ENTITLEMENTS.md). The nested-code set is pinned by scripts/verify-desktop-release.mjs (docs/desktop/NESTED-CODE.md).
+scripts/sign-desktop.mjs verifies the bundled runtime signature and signs the application with Hardened Runtime. No codesign --deep and no sidecar re-signing. The only entitlement is allow-jit (docs/desktop/ENTITLEMENTS.md). The nested-code set is pinned by scripts/verify-desktop-release.mjs (docs/desktop/NESTED-CODE.md).
 
 ## Local development signing
 
