@@ -19,7 +19,12 @@ export const LANGUAGE_PREFERENCE = 'language' as const
 
 type LanguageListener = (language: DesktopLanguage, setting: DesktopLanguageSetting) => void
 
-/** System language resolution: Italian macOS resolves to Italian, everything else English. */
+/**
+ * System language resolution: Italian macOS resolves to Italian, everything
+ * else English. Chinese is never a desktop fallback.
+ * @param primary - the first navigator language, or undefined when unavailable.
+ * @returns the resolved desktop language.
+ */
 export function resolveSystemLanguage(primary: string | undefined): DesktopLanguage {
   if (primary === undefined) return 'en'
   return primary.toLowerCase().startsWith('it') ? 'it' : 'en'

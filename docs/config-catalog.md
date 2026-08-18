@@ -567,6 +567,34 @@ export interface Config {
 
 Source: [`packages/credentials/credentials-local/src/index.ts:55`](../packages/credentials/credentials-local/src/index.ts)
 
+<a id="deepseek-aidsh-desktop-jsonrpc-server"></a>
+
+## `@deepseek-ai/dsh-desktop-jsonrpc-server`
+
+Requires: `apiProxy` · `desktopRuntimeInfo`
+
+```ts config-catalog
+/** JSON-RPC deployment config plus runtime-only test hooks. */
+export interface JsonRpcConfig {
+  /** Transport input override; production uses process.stdin. */
+  input?: Readable
+  /** Transport output override; production uses process.stdout. */
+  output?: Writable
+  /** Process-exit override; production uses process.exit. */
+  exit?: (code: number) => void
+  /**
+   * Whether the desktop host answers credential requests over this
+   * transport: enables the keychain capability flag and provides the
+   * credential bridge service. Defaults to false for generic peers.
+   */
+  keychain?: boolean
+}
+```
+
+Depends on: `Readable` (`node:stream`) · `Writable` (`node:stream`)
+
+Source: [`packages/desktop/desktop-jsonrpc-server/src/index.ts:89`](../packages/desktop/desktop-jsonrpc-server/src/index.ts)
+
 <a id="deepseek-aidsh-e2b"></a>
 
 ## `@deepseek-ai/dsh-e2b`
@@ -3065,6 +3093,7 @@ These load from a `cordis.yml` entry with no `config:` block; they declare no co
 - `@deepseek-ai/dsh-command-goal` — requires `commands` · `goals` ([`packages/goal/command-goal/src/index.ts`](../packages/goal/command-goal/src/index.ts))
 - `@deepseek-ai/dsh-commands` ([`packages/interaction/commands/src/index.ts`](../packages/interaction/commands/src/index.ts))
 - `@deepseek-ai/dsh-cordis-client-runner` ([`packages/extensions/cordis-client-runner/src/index.ts`](../packages/extensions/cordis-client-runner/src/index.ts))
+- `@deepseek-ai/dsh-credentials-keychain` — requires `desktopCredentialBridge` ([`packages/credentials/credentials-keychain/src/index.ts`](../packages/credentials/credentials-keychain/src/index.ts))
 - `@deepseek-ai/dsh-fs-e2b` — requires `e2b` ([`packages/e2b/fs-e2b/src/index.ts`](../packages/e2b/fs-e2b/src/index.ts))
 - `@deepseek-ai/dsh-fs-observation-policy` ([`packages/fs/fs-observation-policy/src/index.ts`](../packages/fs/fs-observation-policy/src/index.ts))
 - `@deepseek-ai/dsh-goal-round-driver` — requires `agents` · `goals` · `sessions` ([`packages/goal/goal-round-driver/src/index.ts`](../packages/goal/goal-round-driver/src/index.ts))
@@ -3130,6 +3159,9 @@ Imported as libraries by other packages; a `cordis.yml` cannot load them.
 - `@deepseek-ai/dsh-client-web` ([`packages/client/web/src/index.ts`](../packages/client/web/src/index.ts))
 - `@deepseek-ai/dsh-client-web-react` ([`packages/client/web-react/src/index.ts`](../packages/client/web-react/src/index.ts))
 - `@deepseek-ai/dsh-cmdline` ([`packages/boot/cmdline/src/index.ts`](../packages/boot/cmdline/src/index.ts))
+- `@deepseek-ai/dsh-desktop-client` ([`packages/desktop/desktop-client/src/index.ts`](../packages/desktop/desktop-client/src/index.ts))
+- `@deepseek-ai/dsh-desktop-protocol` ([`packages/desktop/desktop-protocol/src/index.ts`](../packages/desktop/desktop-protocol/src/index.ts))
+- `@deepseek-ai/dsh-desktop-runtime` ([`packages/desktop/desktop-runtime/src/index.ts`](../packages/desktop/desktop-runtime/src/index.ts))
 - `@deepseek-ai/dsh-home-paths` ([`packages/util/home-paths/src/index.ts`](../packages/util/home-paths/src/index.ts))
 - `@deepseek-ai/dsh-hook-protocol` ([`packages/hooks/hook-protocol/src/index.ts`](../packages/hooks/hook-protocol/src/index.ts))
 - `@deepseek-ai/dsh-launch-environment` ([`packages/util/launch-environment/src/index.ts`](../packages/util/launch-environment/src/index.ts))

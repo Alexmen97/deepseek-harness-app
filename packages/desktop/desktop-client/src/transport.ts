@@ -89,12 +89,18 @@ export interface DesktopBindings {
 
 let bindings: DesktopBindings | undefined
 
-/** Install the platform bindings (Tauri in production, scripted fakes in tests). */
+/**
+ * Install the platform bindings (Tauri in production, scripted fakes in tests).
+ * @param next - the bindings the desktop entry provides before boot.
+ */
 export function installDesktopBindings(next: DesktopBindings): void {
   bindings = next
 }
 
-/** The installed bindings; throws with an actionable message before installation. */
+/**
+ * The installed bindings; throws with an actionable message before installation.
+ * @returns the installed platform bindings.
+ */
 export function desktopBindings(): DesktopBindings {
   if (bindings === undefined) throw new Error('desktop bindings are not installed; the desktop entry must call installDesktopBindings before boot')
   return bindings

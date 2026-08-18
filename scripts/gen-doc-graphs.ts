@@ -97,6 +97,13 @@ const GROUP_ORDER = [
 
 const SERVICE_ROLES: ServiceRole[] = [
   {
+    key: 'desktopRuntimeInfo',
+    pkg: 'desktop-jsonrpc-server',
+    title: 'Desktop runtime identity provider',
+    mode: 'core',
+    note: 'Supplies harness, runtime, and protocol versions to the desktop JSON-RPC server; the composing app bin installs the value before the tree mounts.',
+  },
+  {
     key: 'attachments',
     pkg: 'attachment',
     title: 'Durable binary attachment storage',

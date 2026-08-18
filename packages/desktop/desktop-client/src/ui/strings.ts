@@ -10,6 +10,7 @@
 import { useSyncExternalStore } from 'react'
 import { desktopLocale, type DesktopLanguage } from '../locale.ts'
 
+/** Every desktop-owned UI string key, English canonical and Italian. */
 export type DesktopStringKey =
   | 'onboarding.welcome.title'
   | 'onboarding.welcome.body'
@@ -195,12 +196,20 @@ const it: Record<DesktopStringKey, string> = {
   'error.unknown': 'Si è verificato un errore',
 }
 
-/** Translate one desktop key for a language. */
+/**
+ * Translate one desktop key for a language.
+ * @param language - the resolved desktop language.
+ * @param key - the desktop string key.
+ * @returns the translated string.
+ */
 export function desktopText(language: DesktopLanguage, key: DesktopStringKey): string {
   return (language === 'it' ? it : en)[key]
 }
 
-/** React seat over the desktop language store. */
+/**
+ * React seat over the desktop language store.
+ * @returns the live language and its translation function.
+ */
 export function useDesktopStrings(): { language: DesktopLanguage; t: (key: DesktopStringKey) => string } {
   const language = useSyncExternalStore(
     listener => desktopLocale.subscribe(() => { listener() }),
@@ -213,6 +222,10 @@ export function useDesktopStrings(): { language: DesktopLanguage; t: (key: Deskt
  * Live macOS appearance for the desktop-owned surfaces. The upstream theme
  * system owns the product UI; this hook only keeps the onboarding and
  * settings dialogs readable under both appearances.
+ */
+/**
+ * Live macOS appearance for the desktop-owned surfaces.
+ * @returns the current light or dark appearance, following system changes.
  */
 export function useDesktopAppearance(): 'light' | 'dark' {
   const resolve = (): 'light' | 'dark' => {
@@ -230,7 +243,11 @@ export function useDesktopAppearance(): 'light' | 'dark' {
   )
 }
 
-/** Dialog palette for the current appearance. */
+/**
+ * Dialog palette for the current appearance.
+ * @param appearance - the current light or dark appearance.
+ * @returns the color tokens for the desktop dialogs.
+ */
 export function desktopPalette(appearance: 'light' | 'dark'): {
   dialog: string
   text: string

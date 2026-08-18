@@ -118,6 +118,7 @@ export interface DesktopHostRequestMap {
   'desktop/credential-delete': { params: { ref: string }; result: Record<string, never> }
 }
 
+/** The server-initiated host request methods the desktop transport answers. */
 export const DESKTOP_HOST_REQUEST_METHODS: readonly (keyof DesktopHostRequestMap)[] = [
   'desktop/credential-resolve',
   'desktop/credential-store',

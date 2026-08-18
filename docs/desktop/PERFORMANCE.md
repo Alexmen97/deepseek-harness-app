@@ -1,8 +1,6 @@
 # Desktop performance baseline
 
-Reference baseline recorded on the M2 build machine (Apple Silicon, macOS 26,
-release bundle, ad-hoc hardened signature). Re-measure before each release
-and treat these numbers as ceilings, not targets.
+Reference baseline recorded on the M2 build machine (Apple Silicon, macOS 26, release bundle, ad-hoc hardened signature). Re-measure before each release and treat these numbers as ceilings, not targets.
 
 ## Startup
 
@@ -18,8 +16,4 @@ and treat these numbers as ceilings, not targets.
 
 ## Notes
 
-The first session list render and the first conversation render are bounded
-by the runtime's session projection, not by the desktop layer; the desktop
-adds one IPC hop per unary call and a direct event subscription for streams.
-No optimization work happened in M2 beyond stripping production source maps
-from the frontend bundle (12 MB binary including embedded assets).
+The first session list render and the first conversation render are bounded by the runtime's session projection, not by the desktop layer; the desktop adds one IPC hop per unary call and a direct event subscription for streams. No optimization work happened in M2 beyond stripping production source maps from the frontend bundle (12 MB binary including embedded assets).

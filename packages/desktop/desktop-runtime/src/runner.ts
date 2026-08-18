@@ -12,6 +12,7 @@ import { inspect } from 'node:util'
 import { boot, installFailLoud, loadEnv, resolveConfigPath } from '@deepseek-ai/dsh-app-boot'
 
 /* v8 ignore start -- composition over tested app-boot/server and executable acceptance paths */
+/** Executable identity for fail-loud diagnostics and process naming. */
 export const NAME = 'dsh-desktop-runtime'
 
 /**
