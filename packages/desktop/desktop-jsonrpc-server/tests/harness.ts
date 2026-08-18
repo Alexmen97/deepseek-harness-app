@@ -8,6 +8,8 @@
 import { PassThrough } from 'node:stream'
 import { Context } from '@deepseek-ai/cordis'
 import type { ApiProxy, RpcResult } from '@deepseek-ai/dsh-host-apiproxy'
+import type { FsInfo, FsTarget, FsWriteIntent, FsWriteOutcome } from '@deepseek-ai/dsh-fs'
+import { FsError, FsVersion as brandVersion } from '@deepseek-ai/dsh-fs'
 import { apply as applyServer } from '../src/index.ts'
 import type { WireLine } from './wire.ts'
 
@@ -22,6 +24,52 @@ export const TEST_RUNTIME_INFO: TestRuntimeInfo = {
   harnessVersion: '0.1.0-rc.7',
   runtimeVersion: '0.1.0-rc.7',
   protocolVersion: 1,
+}
+
+/** In-memory ctx.fs stub for filesystem-domain tests. */
+export function makeStubFs(initial: Record<string, string> = {}): {
+  store: Map<string, { content: string; version: number }>
+  fs: {
+    resolve(path: string): Promise<FsTarget>
+    stat(target: FsTarget): Promise<FsInfo | undefined>
+    readText(target: FsTarget): Promise<string>
+    writeText(target: FsTarget, content: string, expected?: FsWriteIntent): Promise<FsWriteOutcome>
+  }
+} {
+  const store = new Map(Object.entries(initial).map(([path, content]) => [path, { content, version: 1 }]))
+  const targetFor = (path: string): FsTarget => ({ targetKey: path as never, displayPath: path })
+  return {
+    store,
+    fs: {
+      resolve: async (path: string) => targetFor(path),
+      stat: async (target: FsTarget) => {
+        const entry = store.get(target.displayPath)
+        if (entry === undefined) return undefined
+        return { version: brandVersion('v' + String(entry.version)), type: 'file', size: entry.content.length }
+      },
+      readText: async (target: FsTarget) => {
+        const entry = store.get(target.displayPath)
+        if (entry === undefined) throw new FsError('not found', 'FS_NOT_FOUND')
+        return entry.content
+      },
+      writeText: async (target: FsTarget, content: string, expected?: FsWriteIntent) => {
+        const entry = store.get(target.displayPath)
+        if (expected?.kind === 'replaceIfVersion') {
+          const current = entry?.version ?? 0
+          const expectedNumber = Number(String(expected.version).replace(/^v/, ''))
+          if (current !== expectedNumber) throw new FsError('stale version', 'FS_STALE_VERSION')
+        }
+        const next = { content, version: (entry?.version ?? 0) + 1 }
+        store.set(target.displayPath, next)
+        return {
+          operation: entry === undefined ? 'create' : 'update',
+          version: brandVersion('v' + String(next.version)),
+          before: entry?.content ?? null,
+          after: content,
+        }
+      },
+    },
+  }
 }
 
 /**
@@ -104,6 +152,7 @@ export async function makeServerHarness(options: {
   attachments?: boolean
   llmProviders?: string[]
   keychain?: boolean
+  fs?: ReturnType<typeof makeStubFs>['fs']
 } = {}): Promise<ServerHarness> {
   const ctx = new Context()
   ctx.provide('apiProxy', options.api ?? stubApiProxy({}))
@@ -111,6 +160,17 @@ export async function makeServerHarness(options: {
   if (options.approval === true) ctx.provide('approval', {})
   if (options.questions === true) ctx.provide('userQuestions', {})
   if (options.attachments === true) ctx.provide('attachments', {})
+  ctx.provide('fs', options.fs ?? makeStubFs().fs)
+  ctx.provide('agents', { get: () => ({}) })
+  ctx.provide('terminals', {
+    spawn: async () => { throw new FsError('no backend', 'FS_IO_ERROR') },
+    startSend: () => { throw new Error('not served') },
+    signal: async () => ({ delivered: true, targetPgid: 0 }),
+    resize: () => {},
+    read: () => ({ text: '', totalLines: 0, lineBegin: 0, lineEnd: 0, truncated: false }),
+    kill: async () => false,
+    list: () => [],
+  })
   if (options.llmProviders !== undefined) {
     ctx.provide('llm', { listProviders: () => options.llmProviders?.map(id => ({ id, name: id })) ?? [] })
   }

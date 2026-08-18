@@ -8,6 +8,7 @@ import { FilesTab } from './FilesTab.tsx'
 import { ChangesTab } from './ChangesTab.tsx'
 import { TerminalTab } from './TerminalTab.tsx'
 import { JobsTab, PlanTab, SubagentsTab } from './StateTabs.tsx'
+import { EditorSurface } from './EditorSurface.tsx'
 
 export type InspectorTab = 'files' | 'changes' | 'terminal' | 'plan' | 'jobs' | 'subagents'
 
@@ -59,51 +60,54 @@ export function Inspector(): ReactElement {
   }
 
   return (
-    <div style={{
-      position: 'fixed',
-      right: 0,
-      top: 0,
-      bottom: 0,
-      width: 380,
-      zIndex: 999,
-      display: 'flex',
-      flexDirection: 'column',
-      background: palette.dialog,
-      borderLeft: '1px solid ' + palette.inputBorder,
-      color: palette.text,
-      fontFamily: 'system-ui',
-    }}>
-      <div style={{ display: 'flex', borderBottom: '1px solid ' + palette.inputBorder }}>
-        {TABS.map(entry => (
-          <button
-            key={entry.id}
-            onClick={() => { selectTab(entry.id) }}
-            style={{
-              flex: 1,
-              padding: '6px 2px',
-              fontSize: 11.5,
-              cursor: 'pointer',
-              background: tab === entry.id ? palette.input : 'transparent',
-              border: 'none',
-              borderBottom: tab === entry.id ? '2px solid #2f6fed' : '2px solid transparent',
-              color: palette.text,
-            }}
-          >
-            {t(entry.key)}
+    <>
+      <EditorSurface />
+      <div style={{
+        position: 'fixed',
+        right: 0,
+        top: 0,
+        bottom: 0,
+        width: 380,
+        zIndex: 999,
+        display: 'flex',
+        flexDirection: 'column',
+        background: palette.dialog,
+        borderLeft: '1px solid ' + palette.inputBorder,
+        color: palette.text,
+        fontFamily: 'system-ui',
+      }}>
+        <div style={{ display: 'flex', borderBottom: '1px solid ' + palette.inputBorder }}>
+          {TABS.map(entry => (
+            <button
+              key={entry.id}
+              onClick={() => { selectTab(entry.id) }}
+              style={{
+                flex: 1,
+                padding: '6px 2px',
+                fontSize: 11.5,
+                cursor: 'pointer',
+                background: tab === entry.id ? palette.input : 'transparent',
+                border: 'none',
+                borderBottom: tab === entry.id ? '2px solid #2f6fed' : '2px solid transparent',
+                color: palette.text,
+              }}
+            >
+              {t(entry.key)}
+            </button>
+          ))}
+          <button onClick={toggleVisible} title={t('inspector.toggle')} style={{ background: 'transparent', border: 'none', color: palette.muted, cursor: 'pointer', padding: '0 8px', fontSize: 13 }}>
+            ▸
           </button>
-        ))}
-        <button onClick={toggleVisible} title={t('inspector.toggle')} style={{ background: 'transparent', border: 'none', color: palette.muted, cursor: 'pointer', padding: '0 8px', fontSize: 13 }}>
-          ▸
-        </button>
+        </div>
+        <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
+          {tab === 'files' && <FilesTab />}
+          {tab === 'changes' && <ChangesTab />}
+          {tab === 'terminal' && <TerminalTab />}
+          {tab === 'plan' && <PlanTab />}
+          {tab === 'jobs' && <JobsTab />}
+          {tab === 'subagents' && <SubagentsTab />}
+        </div>
       </div>
-      <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
-        {tab === 'files' && <FilesTab />}
-        {tab === 'changes' && <ChangesTab />}
-        {tab === 'terminal' && <TerminalTab />}
-        {tab === 'plan' && <PlanTab />}
-        {tab === 'jobs' && <JobsTab />}
-        {tab === 'subagents' && <SubagentsTab />}
-      </div>
-    </div>
+    </>
   )
 }

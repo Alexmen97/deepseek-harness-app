@@ -99,7 +99,7 @@ All M5 strings join the desktop strings namespace in en, zh, it, es, fr, de, pt-
 
 ## Proposed M5 implementation phases
 
-- M5A — editor foundation + safe read/write contract: desktop.fs.stat/read/edit/write, CodeMirror shell, tabs, dirty, Cmd+S, Save All, open/close confirmation.
+- M5A — editor foundation + safe read/write contract: desktop.fs.stat/read/write, CodeMirror shell, tabs, dirty, Cmd+S, open/close confirmation. SHIPPED: see docs/desktop/M5A-TESTING.md (editText was not needed for M5A; whole-file guarded writes cover the editor contract, and literal edits remain the agent tool's surface).
 - M5B — synchronization + conflicts + Quick Open: version-guard conflicts UX, save-driven refresh of Files/Changes/Git, Cmd+P index.
 - M5C — staged/unstaged + file actions: git stage/unstage/restore commands with confirmations, staged/unstaged diff selector.
 - M5D — hunk actions: only if the apply-safe hunk generator proves simple; otherwise document the limitation.

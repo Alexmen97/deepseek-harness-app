@@ -53,6 +53,19 @@ export function useInspectorState(): InspectorState {
   )
 }
 
+/** Synchronous accessor for non-component modules (the M5A editor store). */
+export function getInspectorState(): InspectorState {
+  installInspectorStore()
+  return state
+}
+
+/** Test-only reset of the one-time install and the frame state. */
+export function resetInspectorStoreForTest(): void {
+  installed = false
+  state = EMPTY_INSPECTOR
+  currentGeneration = -1
+}
+
 /** Send one terminal RPC over the runtime transport and return its result. */
 export async function terminalRequest<T>(method: string, params: unknown): Promise<T> {
   const bindings = desktopBindings()

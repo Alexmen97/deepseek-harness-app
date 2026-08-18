@@ -5,6 +5,7 @@ import type { ReactElement } from 'react'
 import { desktopBindings, type DesktopFsEntry } from '@deepseek-ai/dsh-desktop-client'
 import { useDesktopStrings, desktopPalette, useDesktopAppearance } from '@deepseek-ai/dsh-desktop-client/src/ui/strings'
 import { HighlightedLine } from './highlight.tsx'
+import { openFile } from './editorStore.ts'
 
 export function FilesTab(): ReactElement {
   const { t } = useDesktopStrings()
@@ -31,6 +32,8 @@ export function FilesTab(): ReactElement {
 
   const toggle = async (entry: DesktopFsEntry): Promise<void> => {
     if (!entry.isDir) {
+      const opened = await openFile(entry.path)
+      if (opened) return
       setOpenPath(entry.path)
       setQuery('')
       try {

@@ -57,6 +57,8 @@ export interface DesktopCapabilities {
   attachments: boolean
   /** Interactive terminal sessions served by the desktop terminal domain. */
   terminal: boolean
+  /** Session/workspace-scoped filesystem read and guarded write through ctx.fs. */
+  fs: boolean
   /** Whether the desktop host answers credential requests from the macOS Keychain. */
   keychain: boolean
 }
@@ -198,6 +200,61 @@ export interface DesktopRequestMap {
   'desktop.terminal.read': { params: DesktopTerminalReadParams; result: DesktopTerminalReadResult }
   'desktop.terminal.kill': { params: DesktopTerminalKillParams; result: DesktopTerminalKillResult }
   'desktop.terminal.list': { params: DesktopTerminalListParams; result: DesktopTerminalListResult }
+  'desktop.fs.stat': { params: DesktopFsStatParams; result: DesktopFsStatResult }
+  'desktop.fs.read': { params: DesktopFsReadParams; result: DesktopFsReadResult | DesktopFsFailure }
+  'desktop.fs.write': { params: DesktopFsWriteParams; result: DesktopFsWriteResult | DesktopFsFailure }
+}
+
+/** Shared failure shape for the desktop filesystem domain. */
+export interface DesktopFsFailure {
+  ok: false
+  /** Stable FsErrorCode from the Harness filesystem taxonomy. */
+  code: string
+  message?: string
+}
+
+/** Parameters for the workspace-scoped stat request. */
+export interface DesktopFsStatParams {
+  sessionId: string
+  path: string
+}
+
+/** Stat result: present metadata or explicit absence. */
+export interface DesktopFsStatResult {
+  kind: 'present' | 'absent'
+  version?: string
+  type?: 'file' | 'directory' | 'other'
+  size?: number
+}
+
+/** Parameters for the workspace-scoped text read request. */
+export interface DesktopFsReadParams {
+  sessionId: string
+  path: string
+}
+
+/** Read result: content with its freshness token, or a typed failure. */
+export interface DesktopFsReadResult {
+  ok: true
+  version: string
+  content: string
+  size?: number
+}
+
+/** Parameters for the guarded full-file write request. */
+export interface DesktopFsWriteParams {
+  sessionId: string
+  path: string
+  content: string
+  /** Freshness token observed when the editor obtained the content. */
+  expectedVersion?: string
+}
+
+/** Write result: saved with the new version, or a typed failure. */
+export interface DesktopFsWriteResult {
+  ok: true
+  version: string
+  operation: 'create' | 'update'
 }
 
 /** Wire-stable terminal request/result shapes for the M4 terminal domain. */

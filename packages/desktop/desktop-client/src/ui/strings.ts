@@ -118,6 +118,24 @@ export type DesktopStringKey =
   | 'subagents.main'
   | 'subagents.running'
   | 'subagents.completed'
+  | 'editor.backToConversation'
+  | 'editor.empty'
+  | 'editor.save'
+  | 'editor.saving'
+  | 'editor.saved'
+  | 'editor.dirty'
+  | 'editor.saveError'
+  | 'editor.conflictState'
+  | 'editor.conflictBody'
+  | 'editor.conflictReload'
+  | 'editor.conflictKeep'
+  | 'editor.closeTab'
+  | 'editor.unsavedBody'
+  | 'editor.unsavedCancel'
+  | 'editor.unsavedDiscard'
+  | 'editor.unsavedSave'
+  | 'editor.readOnly'
+  | 'editor.large'
 
 /** English canonical desktop dictionary. */
 export const en: Record<DesktopStringKey, string> = {
@@ -227,6 +245,24 @@ export const en: Record<DesktopStringKey, string> = {
   'subagents.main': 'Main agent',
   'subagents.running': 'Running',
   'subagents.completed': 'Completed',
+  'editor.backToConversation': 'Back to conversation',
+  'editor.empty': 'No open files',
+  'editor.save': 'Save',
+  'editor.saving': 'Saving…',
+  'editor.saved': 'Saved',
+  'editor.dirty': 'Unsaved changes',
+  'editor.saveError': 'Save failed',
+  'editor.conflictState': 'Conflict',
+  'editor.conflictBody': 'The file changed on disk since it was opened. Reload to see the newer content, or keep editing.',
+  'editor.conflictReload': 'Reload from disk',
+  'editor.conflictKeep': 'Keep editing',
+  'editor.closeTab': 'Close tab',
+  'editor.unsavedBody': 'This file has unsaved changes.',
+  'editor.unsavedCancel': 'Cancel',
+  'editor.unsavedDiscard': 'Discard changes',
+  'editor.unsavedSave': 'Save',
+  'editor.readOnly': 'Read only',
+  'editor.large': 'File too large to edit',
 }
 
 /** Italian dictionary, complete against the English key set. */
@@ -337,6 +373,24 @@ export const it: Record<DesktopStringKey, string> = {
   'subagents.main': 'Agente principale',
   'subagents.running': 'In esecuzione',
   'subagents.completed': 'Completato',
+  'editor.backToConversation': 'Torna alla conversazione',
+  'editor.empty': 'Nessun file aperto',
+  'editor.save': 'Salva',
+  'editor.saving': 'Salvataggio…',
+  'editor.saved': 'Salvato',
+  'editor.dirty': 'Modifiche non salvate',
+  'editor.saveError': 'Salvataggio non riuscito',
+  'editor.conflictState': 'Conflitto',
+  'editor.conflictBody': 'Il file è cambiato su disco dopo l’apertura. Ricarica per vedere il contenuto più recente, oppure continua a modificare.',
+  'editor.conflictReload': 'Ricarica dal disco',
+  'editor.conflictKeep': 'Continua a modificare',
+  'editor.closeTab': 'Chiudi scheda',
+  'editor.unsavedBody': 'Questo file ha modifiche non salvate.',
+  'editor.unsavedCancel': 'Annulla',
+  'editor.unsavedDiscard': 'Scarta le modifiche',
+  'editor.unsavedSave': 'Salva',
+  'editor.readOnly': 'Sola lettura',
+  'editor.large': 'File troppo grande per la modifica',
 }
 
 /** Chinese dictionary, complete against the English key set. */
@@ -447,6 +501,24 @@ export const zh: Record<DesktopStringKey, string> = {
   'subagents.main': '主代理',
   'subagents.running': '运行中',
   'subagents.completed': '已完成',
+  'editor.backToConversation': '返回对话',
+  'editor.empty': '没有打开的文件',
+  'editor.save': '保存',
+  'editor.saving': '保存中…',
+  'editor.saved': '已保存',
+  'editor.dirty': '未保存的更改',
+  'editor.saveError': '保存失败',
+  'editor.conflictState': '冲突',
+  'editor.conflictBody': '文件在打开后已在磁盘上发生变化。重新加载以查看较新的内容，或继续编辑。',
+  'editor.conflictReload': '从磁盘重新加载',
+  'editor.conflictKeep': '继续编辑',
+  'editor.closeTab': '关闭标签页',
+  'editor.unsavedBody': '此文件有未保存的更改。',
+  'editor.unsavedCancel': '取消',
+  'editor.unsavedDiscard': '放弃更改',
+  'editor.unsavedSave': '保存',
+  'editor.readOnly': '只读',
+  'editor.large': '文件太大，无法编辑',
 }
 /** Spanish dictionary, complete against the English key set. */
 export const es: Record<DesktopStringKey, string> = {
@@ -556,6 +628,24 @@ export const es: Record<DesktopStringKey, string> = {
   'subagents.main': 'Agente principal',
   'subagents.running': 'En ejecución',
   'subagents.completed': 'Completado',
+  'editor.backToConversation': 'Volver a la conversación',
+  'editor.empty': 'No hay archivos abiertos',
+  'editor.save': 'Guardar',
+  'editor.saving': 'Guardando…',
+  'editor.saved': 'Guardado',
+  'editor.dirty': 'Cambios sin guardar',
+  'editor.saveError': 'Error al guardar',
+  'editor.conflictState': 'Conflicto',
+  'editor.conflictBody': 'El archivo cambió en el disco desde que se abrió. Recarga para ver el contenido más reciente o sigue editando.',
+  'editor.conflictReload': 'Recargar del disco',
+  'editor.conflictKeep': 'Seguir editando',
+  'editor.closeTab': 'Cerrar pestaña',
+  'editor.unsavedBody': 'Este archivo tiene cambios sin guardar.',
+  'editor.unsavedCancel': 'Cancelar',
+  'editor.unsavedDiscard': 'Descartar cambios',
+  'editor.unsavedSave': 'Guardar',
+  'editor.readOnly': 'Solo lectura',
+  'editor.large': 'Archivo demasiado grande para editar',
 }
 /** French dictionary, complete against the English key set. */
 export const fr: Record<DesktopStringKey, string> = {
@@ -665,6 +755,24 @@ export const fr: Record<DesktopStringKey, string> = {
   'subagents.main': 'Agent principal',
   'subagents.running': 'En cours',
   'subagents.completed': 'Terminé',
+  'editor.backToConversation': 'Retour à la conversation',
+  'editor.empty': 'Aucun fichier ouvert',
+  'editor.save': 'Enregistrer',
+  'editor.saving': 'Enregistrement…',
+  'editor.saved': 'Enregistré',
+  'editor.dirty': 'Modifications non enregistrées',
+  'editor.saveError': 'Échec de l’enregistrement',
+  'editor.conflictState': 'Conflit',
+  'editor.conflictBody': 'Le fichier a changé sur le disque depuis son ouverture. Rechargez pour voir le contenu le plus récent, ou continuez à modifier.',
+  'editor.conflictReload': 'Recharger depuis le disque',
+  'editor.conflictKeep': 'Continuer à modifier',
+  'editor.closeTab': 'Fermer l’onglet',
+  'editor.unsavedBody': 'Ce fichier a des modifications non enregistrées.',
+  'editor.unsavedCancel': 'Annuler',
+  'editor.unsavedDiscard': 'Abandonner les modifications',
+  'editor.unsavedSave': 'Enregistrer',
+  'editor.readOnly': 'Lecture seule',
+  'editor.large': 'Fichier trop volumineux pour la modification',
 }
 /** German dictionary, complete against the English key set. */
 export const de: Record<DesktopStringKey, string> = {
@@ -774,6 +882,24 @@ export const de: Record<DesktopStringKey, string> = {
   'subagents.main': 'Hauptagent',
   'subagents.running': 'Läuft',
   'subagents.completed': 'Abgeschlossen',
+  'editor.backToConversation': 'Zurück zur Konversation',
+  'editor.empty': 'Keine offenen Dateien',
+  'editor.save': 'Speichern',
+  'editor.saving': 'Speichern…',
+  'editor.saved': 'Gespeichert',
+  'editor.dirty': 'Ungespeicherte Änderungen',
+  'editor.saveError': 'Speichern fehlgeschlagen',
+  'editor.conflictState': 'Konflikt',
+  'editor.conflictBody': 'Die Datei hat sich seit dem Öffnen auf dem Datenträger geändert. Neu laden, um den neueren Inhalt zu sehen, oder weiter bearbeiten.',
+  'editor.conflictReload': 'Vom Datenträger neu laden',
+  'editor.conflictKeep': 'Weiter bearbeiten',
+  'editor.closeTab': 'Tab schließen',
+  'editor.unsavedBody': 'Diese Datei hat ungespeicherte Änderungen.',
+  'editor.unsavedCancel': 'Abbrechen',
+  'editor.unsavedDiscard': 'Änderungen verwerfen',
+  'editor.unsavedSave': 'Speichern',
+  'editor.readOnly': 'Schreibgeschützt',
+  'editor.large': 'Datei zu groß zum Bearbeiten',
 }
 /** Brazilian Portuguese dictionary, complete against the English key set. */
 export const ptBr: Record<DesktopStringKey, string> = {
@@ -883,6 +1009,24 @@ export const ptBr: Record<DesktopStringKey, string> = {
   'subagents.main': 'Agente principal',
   'subagents.running': 'Em execução',
   'subagents.completed': 'Concluído',
+  'editor.backToConversation': 'Voltar à conversa',
+  'editor.empty': 'Nenhum arquivo aberto',
+  'editor.save': 'Salvar',
+  'editor.saving': 'Salvando…',
+  'editor.saved': 'Salvo',
+  'editor.dirty': 'Alterações não salvas',
+  'editor.saveError': 'Falha ao salvar',
+  'editor.conflictState': 'Conflito',
+  'editor.conflictBody': 'O arquivo mudou no disco desde que foi aberto. Recarregue para ver o conteúdo mais recente ou continue editando.',
+  'editor.conflictReload': 'Recarregar do disco',
+  'editor.conflictKeep': 'Continuar editando',
+  'editor.closeTab': 'Fechar aba',
+  'editor.unsavedBody': 'Este arquivo tem alterações não salvas.',
+  'editor.unsavedCancel': 'Cancelar',
+  'editor.unsavedDiscard': 'Descartar alterações',
+  'editor.unsavedSave': 'Salvar',
+  'editor.readOnly': 'Somente leitura',
+  'editor.large': 'Arquivo grande demais para editar',
 }
 
 /**

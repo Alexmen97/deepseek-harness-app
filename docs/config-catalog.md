@@ -571,7 +571,7 @@ Source: [`packages/credentials/credentials-local/src/index.ts:55`](../packages/c
 
 ## `@deepseek-ai/dsh-desktop-jsonrpc-server`
 
-Requires: `apiProxy` · `desktopRuntimeInfo` · `terminals` · `agents`
+Requires: `apiProxy` · `desktopRuntimeInfo` · `terminals` · `agents` · `fs`
 
 ```ts config-catalog
 /** JSON-RPC deployment config plus runtime-only test hooks. */
@@ -593,7 +593,7 @@ export interface JsonRpcConfig {
 
 Depends on: `Readable` (`node:stream`) · `Writable` (`node:stream`)
 
-Source: [`packages/desktop/desktop-jsonrpc-server/src/index.ts:92`](../packages/desktop/desktop-jsonrpc-server/src/index.ts)
+Source: [`packages/desktop/desktop-jsonrpc-server/src/index.ts:94`](../packages/desktop/desktop-jsonrpc-server/src/index.ts)
 
 <a id="deepseek-aidsh-e2b"></a>
 

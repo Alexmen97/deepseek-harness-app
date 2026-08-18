@@ -14,6 +14,9 @@
     "types": ["node"]
   },
   "include": [
+    "apps/desktop/src/inspector/store-core.ts",
+    "apps/desktop/src/inspector/store.ts",
+    "apps/desktop/src/inspector/editorStore.ts",
     // Source-subpath test imports can arrive through workspace links whose
     // realpath semantics vary by host. Load package CSS declarations directly.
     "packages/client/*/src/css-modules.d.ts",

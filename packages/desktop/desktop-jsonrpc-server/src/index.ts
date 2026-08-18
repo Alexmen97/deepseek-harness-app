@@ -16,6 +16,8 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { SessionId } from '@deepseek-ai/dsh-session'
 import type { TerminalSendResult, TerminalSessionId, TerminalSendOperation, TerminalSignal } from '@deepseek-ai/dsh-terminal'
+import type { FsWriteIntent } from '@deepseek-ai/dsh-fs'
+import { FsVersion } from '@deepseek-ai/dsh-fs'
 import type { Readable, Writable } from 'node:stream'
 import type { z } from 'zod'
 import Schema from '@deepseek-ai/schemastery'
@@ -86,7 +88,7 @@ export interface DesktopRuntimeInfo {
 
 export const name = 'desktop-jsonrpc-server'
 /** Only the gateway face and the identity provider are required; capability flags read optional seams. */
-export const inject = ['apiProxy', 'desktopRuntimeInfo', 'terminals', 'agents']
+export const inject = ['apiProxy', 'desktopRuntimeInfo', 'terminals', 'agents', 'fs']
 
 /** JSON-RPC deployment config plus runtime-only test hooks. */
 export interface JsonRpcConfig {
@@ -294,6 +296,7 @@ export function apply(ctx: Context, config: JsonRpcConfig = {}): void {
     questions: ctx.get('userQuestions') !== undefined,
     attachments: ctx.get('attachments') !== undefined,
     terminal: true,
+    fs: true,
     keychain: config.keychain === true,
   })
 
@@ -489,6 +492,69 @@ export function apply(ctx: Context, config: JsonRpcConfig = {}): void {
     return { terminals }
   }
 
+  /** Validate one workspace-scoped filesystem reference pair. */
+  const fsRef = (raw: unknown): { sessionId: string; path: string } => {
+    if (typeof raw !== 'object' || raw === null) throw new Error('filesystem request must carry sessionId and path')
+    const value = raw as { sessionId?: unknown; path?: unknown }
+    if (typeof value.sessionId !== 'string' || value.sessionId === '') throw new Error('filesystem sessionId must be a non-empty string')
+    if (typeof value.path !== 'string' || value.path === '') throw new Error('filesystem path must be a non-empty string')
+    terminalAgent(value.sessionId)
+    return { sessionId: value.sessionId, path: value.path }
+  }
+
+  /** The initialized workspace cwd every desktop filesystem call resolves under. */
+  const fsCwd = (): string => {
+    if (initialized === undefined) throw new Error('desktop.initialize must complete before desktop.fs.*')
+    return initialized.cwd
+  }
+
+  /** Render any filesystem failure as the wire-stable typed shape. */
+  const fsFailure = (error: unknown): { ok: false; code: string; message?: string } => {
+    // Structural code extraction: the packaged closure may carry more than
+    // one dsh-fs instance, so instanceof cannot identify FsError reliably.
+    const code = typeof (error as { code?: unknown }).code === 'string'
+      ? (error as { code: string }).code
+      : 'FS_IO_ERROR'
+    return { ok: false, code, ...(error instanceof Error ? { message: error.message } : {}) }
+  }
+
+  const fsStat = async (raw: unknown) => {
+    const { path } = fsRef(raw)
+    const target = await ctx.fs.resolve(path, { cwd: fsCwd() })
+    const info = await ctx.fs.stat(target)
+    if (info === undefined) return { kind: 'absent' }
+    return { kind: 'present', version: info.version, type: info.type, ...(info.size !== undefined ? { size: info.size } : {}) }
+  }
+
+  const fsRead = async (raw: unknown) => {
+    const { path } = fsRef(raw)
+    try {
+      const target = await ctx.fs.resolve(path, { cwd: fsCwd() })
+      const info = await ctx.fs.stat(target)
+      if (info === undefined) return { ok: false, code: 'FS_NOT_FOUND' }
+      const content = await ctx.fs.readText(target)
+      return { ok: true, version: info.version, content, ...(info.size !== undefined ? { size: info.size } : {}) }
+    } catch (error) {
+      return fsFailure(error)
+    }
+  }
+
+  const fsWrite = async (raw: unknown) => {
+    const { path } = fsRef(raw)
+    const value = raw as { content?: unknown; expectedVersion?: unknown }
+    if (typeof value.content !== 'string') throw new Error('filesystem write requires string content')
+    try {
+      const target = await ctx.fs.resolve(path, { cwd: fsCwd() })
+      const expected: FsWriteIntent | undefined = typeof value.expectedVersion === 'string' && value.expectedVersion !== ''
+        ? { kind: 'replaceIfVersion', version: FsVersion(value.expectedVersion) }
+        : undefined
+      const outcome = await ctx.fs.writeText(target, value.content, expected)
+      return { ok: true, version: outcome.version, operation: outcome.operation }
+    } catch (error) {
+      return fsFailure(error)
+    }
+  }
+
   transport.onRequest(async (method, rawParams) => {
     if (shuttingDown) throw new Error('desktop runtime is shutting down')
     switch (method) {
@@ -519,6 +585,9 @@ export function apply(ctx: Context, config: JsonRpcConfig = {}): void {
       case 'desktop.terminal.read': return terminalRead(rawParams)
       case 'desktop.terminal.kill': return terminalKill(rawParams)
       case 'desktop.terminal.list': return terminalList(rawParams)
+      case 'desktop.fs.stat': return fsStat(rawParams)
+      case 'desktop.fs.read': return fsRead(rawParams)
+      case 'desktop.fs.write': return fsWrite(rawParams)
       default: {
         // The shared transport reports every handler failure as -32603; the
         // message keeps the method-not-found semantics the client renders.
