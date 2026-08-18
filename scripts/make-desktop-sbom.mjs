@@ -12,7 +12,7 @@
  * repository state: a stable UUIDv5 serial, sorted components, no
  * timestamps. Repository coordinates come from
  * docs/project/project-metadata.json and are omitted while the GitHub owner
- * is unknown.
+ * is unset.
  *
  * Usage: node scripts/make-desktop-sbom.mjs
  */

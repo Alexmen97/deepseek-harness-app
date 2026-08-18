@@ -30,6 +30,10 @@ pub const DEFAULT_MAX_FRAME_BYTES: usize = 16 * 1024 * 1024;
 pub const HARNESS_VERSION: &str = "0.1.0-rc.7";
 /// The desktop wire protocol version the app expects (mirrors the TypeScript DESKTOP_PROTOCOL_VERSION).
 pub const DESKTOP_PROTOCOL_VERSION: u32 = 1;
+/// macOS Keychain service namespace for the desktop credential bridge.
+/// Matches the bundle identifier so the credential namespace moves with the app identity;
+/// do not change it silently (docs/desktop/CREDENTIALS.md).
+pub const KEYCHAIN_SERVICE: &str = "io.github.alexmen97.harness-desktop";
 
 /// Restart budget: at most this many automatic restarts per window.
 pub const MAX_RESTARTS_PER_WINDOW: u32 = 3;
@@ -739,7 +743,7 @@ fn handle_child_exit<H: DesktopHost>(manager: &SharedManager<H>, exit_code: Opti
 }
 
 pub fn keychain_get(reference: &str) -> Result<Option<String>, String> {
-    let entry = keyring::Entry::new("com.deepseek.harness.desktop", reference)
+    let entry = keyring::Entry::new(KEYCHAIN_SERVICE, reference)
         .map_err(|error| format!("keychain unavailable: {error}"))?;
     match entry.get_password() {
         Ok(value) => Ok(Some(value)),
@@ -749,7 +753,7 @@ pub fn keychain_get(reference: &str) -> Result<Option<String>, String> {
 }
 
 pub fn keychain_set(reference: &str, value: &str) -> Result<(), String> {
-    let entry = keyring::Entry::new("com.deepseek.harness.desktop", reference)
+    let entry = keyring::Entry::new(KEYCHAIN_SERVICE, reference)
         .map_err(|error| format!("keychain unavailable: {error}"))?;
     entry
         .set_password(value)
@@ -757,7 +761,7 @@ pub fn keychain_set(reference: &str, value: &str) -> Result<(), String> {
 }
 
 pub fn keychain_delete(reference: &str) -> Result<(), String> {
-    let entry = keyring::Entry::new("com.deepseek.harness.desktop", reference)
+    let entry = keyring::Entry::new(KEYCHAIN_SERVICE, reference)
         .map_err(|error| format!("keychain unavailable: {error}"))?;
     match entry.delete_credential() {
         Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),

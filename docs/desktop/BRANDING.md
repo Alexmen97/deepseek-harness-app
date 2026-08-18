@@ -11,20 +11,16 @@ The application is named Harness Desktop. Onboarding, About, and the error surfa
 These values ship to users and must not change casually:
 
 - Application name: Harness Desktop
-- Bundle identifier: com.deepseek.harness.desktop (reverse-DNS, stable)
+- Bundle identifier: io.github.alexmen97.harness-desktop (reverse-DNS, stable)
 - Executable: harness-desktop (inside Contents/MacOS)
-- Keychain service: com.deepseek.harness.desktop
-- Log directory: <Application Support>/com.deepseek.harness.desktop/logs
-- Preferences file: <Application Support>/com.deepseek.harness.desktop/prefs.json
-- DMG name: Harness-Desktop-<version>-macOS-arm64.dmg
-- Keychain service: com.deepseek.harness.desktop (independent of the bundle identifier; see the identifier review below)
-- Log directory: <Application Support>/com.deepseek.harness.desktop/logs
-- Preferences file: <Application Support>/com.deepseek.harness.desktop/prefs.json
+- Keychain service: io.github.alexmen97.harness-desktop (matches the bundle identifier; defined in apps/desktop/src-tauri/src/manager.rs)
+- Log directory: <Application Support>/io.github.alexmen97.harness-desktop/logs
+- Preferences file: <Application Support>/io.github.alexmen97.harness-desktop/prefs.json
 - DMG name: DeepSeek-Harness-App-v<version>-macOS-arm64.dmg
 
-## Bundle identifier review
+## Bundle identifier
 
-`com.deepseek.harness.desktop` places the deepseek domain authority in a community project that does not control that domain. Before the first public release the maintainer should choose a reverse-DNS identifier under a domain the maintainer controls (for example io.github.<owner>.harness-desktop); the recommendation is deliberately left unset until the GitHub owner is known. Changing the identifier later is disruptive: Keychain items, preferences, and the log directory all derive from it. The Keychain service name is a separate string (apps/desktop/src-tauri/src/manager.rs) and does not change automatically with the identifier; docs/desktop/CREDENTIALS.md records the migration impact. This decision needs maintainer approval before publication.
+The public bundle identifier io.github.alexmen97.harness-desktop is reverse-DNS of the maintainer's GitHub Pages namespace io.github.alexmen97 and matches the application name. It was adopted before the first public release so the app identity never claims the deepseek domain authority. The Application Support directory, logs, and preferences derive from the identifier; the Keychain service uses the same string. docs/desktop/CREDENTIALS.md records the development-only migration impact.
 
 ## Artwork
 

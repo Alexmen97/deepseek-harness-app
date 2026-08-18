@@ -14,14 +14,14 @@ Reference for the public project identity and the boundary between the two proje
 | Repository display name | DeepSeek Harness App |
 | Recommended repository slug | deepseek-harness-app |
 | Application display name | Harness Desktop |
-| Bundle identifier | com.deepseek.harness.desktop |
+| Bundle identifier | io.github.alexmen97.harness-desktop |
 | GitHub description | Open-source macOS desktop client for DeepSeek Harness. |
 
 The application keeps the provisional name Harness Desktop. Naming the application DeepSeek Harness App would place the DeepSeek mark in the application name and dock presence, which reads as official affiliation without permission. The repository name carries the project identity while the application name stays trademark-conservative; the About window and the README state the relationship explicitly.
 
-## Open identifier decision
+## Bundle identifier
 
-The bundle identifier com.deepseek.harness.desktop is under review: the deepseek reverse-DNS authority implies domain ownership the community project does not have. The recommendation is a maintainer-controlled identifier decided before the first public release, with the Keychain/preferences migration documented in docs/desktop/BRANDING.md and docs/desktop/CREDENTIALS.md. This requires maintainer approval before GitHub publication.
+The public bundle identifier io.github.alexmen97.harness-desktop is reverse-DNS of the maintainer-controlled GitHub Pages namespace io.github.alexmen97; it never claims the deepseek domain authority. It was fixed before GitHub publication, with the Keychain and preferences migration impact documented in docs/desktop/BRANDING.md and docs/desktop/CREDENTIALS.md.
 
 ## Required disclaimer wording
 

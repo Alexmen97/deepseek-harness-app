@@ -96,7 +96,7 @@ The Tauri/Rust layer is the ONLY owner of the sidecar lifecycle. The React/WebVi
 ## H. Security model
 
 - **Transport**: stdio only. No HTTP/WebSocket listener, no port, no LAN exposure, no DNS-rebinding surface.
-- **API key**: stored in the macOS Keychain (`service: com.deepseek.harness.desktop`) per `docs/desktop/CREDENTIALS.md`; the runtime resolves it through the credentials-keychain provider over server-initiated stdio requests, the environment-injection path stays test/dev only, and a test pins that credential-shaped values never appear in transport output.
+- **API key**: stored in the macOS Keychain (`service: io.github.alexmen97.harness-desktop`) per `docs/desktop/CREDENTIALS.md`; the runtime resolves it through the credentials-keychain provider over server-initiated stdio requests, the environment-injection path stays test/dev only, and a test pins that credential-shaped values never appear in transport output.
 - **Filesystem**: the workspace is the user-picked folder; reads/writes go through `ctx.fs` plus the upstream policy; the desktop exposes no bypass.
 - **Subprocess**: spawned processes go through `ctx.subprocess`/`ctx.shell` under the harness sandbox and approval policy; the Tauri layer has no exec command.
 - **WebView**: restrictive CSP, navigation locked to the app origin, external links in the system browser, no DevTools auto-open in production.

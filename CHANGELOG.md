@@ -16,6 +16,7 @@ All notable changes to DeepSeek Harness App are documented here in a Keep a Chan
 
 ### Changed
 
+- The public bundle identifier and Keychain service moved from com.deepseek.harness.desktop to io.github.alexmen97.harness-desktop before the first public release, so the app identity never claims the deepseek domain authority.
 - The application name remains Harness Desktop while the public project is DeepSeek Harness App.
 - Distribution artifacts use the public DeepSeek-Harness-App-v<version>-macOS-arm64.dmg naming with LICENSE and THIRD_PARTY_NOTICES.md inside the DMG.
 

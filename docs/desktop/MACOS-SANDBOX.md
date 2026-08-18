@@ -18,7 +18,7 @@ The release bundle is ad-hoc signed, including the embedded runtime executable. 
 
 ## Keychain
 
-The ad-hoc-signed app accesses macOS Keychain items under its own service namespace (com.deepseek.harness.desktop) with the user's keychain permissions; no entitlement is required for the user's own items. See [CREDENTIALS.md](CREDENTIALS.md) for the credential flow.
+The ad-hoc-signed app accesses macOS Keychain items under its own service namespace (io.github.alexmen97.harness-desktop) with the user's keychain permissions; no entitlement is required for the user's own items. See [CREDENTIALS.md](CREDENTIALS.md) for the credential flow.
 
 ## WebView CSP
 
