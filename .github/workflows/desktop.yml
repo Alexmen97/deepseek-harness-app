@@ -32,9 +32,9 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - run: pnpm install --frozen-lockfile
       - name: Typecheck
-        run: |
-          pnpm exec tsc -b tsconfig.host.json
-          pnpm exec tsc -b tsconfig.client.json
+        # The canonical script builds the host lib first: package exports such
+        # as */remote resolve to generated typert artifacts under lib/.
+        run: pnpm run typecheck
       - name: Lint
         run: pnpm exec oxlint -c .oxlintrc.json packages/desktop packages/credentials/credentials-keychain packages/api/gateway/src/client apps/desktop/src apps/desktop/tests
       - name: Desktop test suites
