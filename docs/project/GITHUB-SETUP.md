@@ -11,3 +11,7 @@ Settings to apply after the public repository is created. None of these are perf
 ## Branch protection rationale
 
 main stays green through the public CI checks; force pushes are blocked so history remains the audit trail. The release environment carries the only human-approval gate because that is where credentials and published artifacts live.
+
+## Public CI on main
+
+Pushes to main run the secret scan and the real-API e2e workflow. The e2e workflow skips its build and suite with a warning while the repository secret DEEPSEEK_API_KEY_EXTERNAL is unset, and runs them with the key once the secret exists. The upstream workflows whose push triggers name master (ci, sandbox, release, release-vendor, landlock-run, docs-pages) do not trigger on main; their pull-request triggers may reference upstream organization runner pools and are not adapted for public pull requests. Required status checks in the branch ruleset stay unset until the public CI check names are decided.
