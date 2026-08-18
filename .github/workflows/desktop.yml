@@ -47,9 +47,11 @@ jobs:
         working-directory: apps/desktop/src-tauri
         run: |
           # tauri-build validates declared bundle resources even for unit tests;
-          # the real SEA is staged only by the tauri build's beforeBuildCommand,
-          # so stage the tracked runtime config and a sidecar placeholder to
+          # generate_context! also reads the icon, and the real SEA is staged
+          # only by the tauri build's beforeBuildCommand, so generate the icon
+          # and stage the tracked runtime config plus a sidecar placeholder to
           # satisfy the dev-profile resource checks here.
+          node ../../../scripts/desktop-icon.mjs
           mkdir -p resources/sidecar
           mkdir -p resources/runtime
           if [ ! -e resources/sidecar/dsh-desktop-runtime ]; then
