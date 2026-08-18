@@ -36,7 +36,7 @@ node scripts/verify-desktop-release.mjs
 
 ## DMG
 
-scripts/make-desktop-dmg.mjs stages Harness Desktop.app beside an Applications alias and builds Harness-Desktop-<version>-macOS-arm64.dmg with hdiutil. The mounted layout uses Finder window positions set via AppleScript when available; a failed layout script degrades to the default Finder arrangement, never to a broken DMG.
+scripts/make-desktop-dmg.mjs stages Harness Desktop.app beside an Applications alias and builds DeepSeek-Harness-App-v<version>-macOS-arm64.dmg with hdiutil. The mounted layout uses Finder window positions set via AppleScript when available; a failed layout script degrades to the default Finder arrangement, never to a broken DMG.
 
 ## CI
 

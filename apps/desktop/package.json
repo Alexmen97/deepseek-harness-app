@@ -1,5 +1,9 @@
 {
   "name": "@deepseek-ai/dsh-desktop-frontend",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Alexmen97/deepseek-harness-app.git"
+  },
   "description": "Tauri desktop frontend: Vite build over the reused web client shell, with the desktop IPC carrier and onboarding/settings surfaces",
   "version": "0.1.0-rc.7",
   "private": true,

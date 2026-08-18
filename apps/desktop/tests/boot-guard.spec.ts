@@ -8,7 +8,7 @@ describe('desktop boot guard', () => {
       entries: [{ id: 'a', url: 'static://a', rev: 'desktop-1', inject: [], immediately: true }],
     }
     expect(containsJsExpr(manifest)).toBe(false)
-    expect(() => assertNoJsExpr(manifest)).not.toThrow()
+    expect(() => { assertNoJsExpr(manifest) }).not.toThrow()
   })
 
   it('rejects a !!js expression node anywhere in the manifest', () => {
@@ -20,7 +20,7 @@ describe('desktop boot guard', () => {
     ]
     for (const manifest of cases) {
       expect(containsJsExpr(manifest)).toBe(true)
-      expect(() => assertNoJsExpr(manifest)).toThrow(/!!js expression node/)
+      expect(() => { assertNoJsExpr(manifest) }).toThrow(/!!js expression node/)
     }
   })
 })

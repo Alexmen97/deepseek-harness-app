@@ -1,5 +1,5 @@
 /**
- * Build Harness-Desktop-<version>-macOS-arm64.dmg from a built .app.
+ * Build DeepSeek-Harness-App-v<version>-macOS-arm64.dmg from a built .app.
  * Simple and professional: the app beside an Applications alias, sensible
  * Finder layout when AppleScript is available, no custom installer.
  */

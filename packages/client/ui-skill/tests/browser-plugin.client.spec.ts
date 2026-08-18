@@ -138,6 +138,41 @@ describe('apply', () => {
           'row.instructions': 'Instructions',
           'menu.userOnly': 'user-only',
         },
+        it: {
+          'row.running': 'Caricamento skill',
+          'row.failed': 'Caricamento skill non riuscito',
+          'row.stopped': 'Caricamento skill interrotto',
+          'row.instructions': 'Istruzioni',
+          'menu.userOnly': 'solo utente',
+        },
+        es: {
+          'row.running': 'Cargando skill',
+          'row.failed': 'Error al cargar la skill',
+          'row.stopped': 'Carga de la skill detenida',
+          'row.instructions': 'Instrucciones',
+          'menu.userOnly': 'solo usuario',
+        },
+        fr: {
+          'row.running': 'Chargement de la compétence',
+          'row.failed': 'Échec du chargement de la compétence',
+          'row.stopped': 'Chargement de la compétence arrêté',
+          'row.instructions': 'Instructions',
+          'menu.userOnly': 'utilisateur uniquement',
+        },
+        de: {
+          'row.running': 'Skill wird geladen',
+          'row.failed': 'Laden des Skills fehlgeschlagen',
+          'row.stopped': 'Laden des Skills gestoppt',
+          'row.instructions': 'Anweisungen',
+          'menu.userOnly': 'nur Benutzer',
+        },
+        'pt-BR': {
+          'row.running': 'Carregando skill',
+          'row.failed': 'Falha ao carregar a skill',
+          'row.stopped': 'Carregamento da skill interrompido',
+          'row.instructions': 'Instruções',
+          'menu.userOnly': 'somente usuário',
+        },
       },
     }])
   })

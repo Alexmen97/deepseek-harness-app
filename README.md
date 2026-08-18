@@ -18,13 +18,12 @@ DeepSeek Harness App wraps the packaged DeepSeek Harness runtime in a Tauri desk
 - Sessions with streaming responses, tool calls, approvals, and questions
 - Image attachments through paste, drop, or the native picker
 - API key in the macOS Keychain; no plaintext credential storage
-- English and Italian surfaces with a System language option
 - English, Chinese, Italian, Spanish, French, German, and Brazilian Portuguese surfaces with a System language option
 - Native menu, shortcuts, notifications, and About window
 
 ## Installation
 
-1. Download the latest .dmg from Releases.
+1. Download the latest .dmg from the [Releases](https://github.com/Alexmen97/deepseek-harness-app/releases) page.
 2. Open the DMG.
 3. Drag Harness Desktop to Applications.
 4. Launch the app.

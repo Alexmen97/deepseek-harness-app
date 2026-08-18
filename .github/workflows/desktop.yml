@@ -1,6 +1,8 @@
 name: Desktop
 
 on:
+  push:
+    branches: [main]
   pull_request:
     paths:
       - apps/desktop/**
@@ -34,7 +36,7 @@ jobs:
           pnpm exec tsc -b tsconfig.host.json
           pnpm exec tsc -b tsconfig.client.json
       - name: Lint
-        run: pnpm exec oxlint -c .oxlintrc.json packages/desktop packages/credentials/credentials-keychain packages/api/gateway/src/client apps/desktop/src
+        run: pnpm exec oxlint -c .oxlintrc.json packages/desktop packages/credentials/credentials-keychain packages/api/gateway/src/client apps/desktop/src apps/desktop/tests
       - name: Desktop test suites
         run: pnpm exec vitest run packages/desktop packages/credentials/credentials-keychain packages/api/gateway packages/api/remotes apps/desktop/tests
       - name: Localization coverage
@@ -50,6 +52,7 @@ jobs:
 
   release-unsigned:
     needs: checks
+    if: github.event_name == 'pull_request'
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
@@ -70,14 +73,14 @@ jobs:
       - name: Upload development artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Harness-Desktop-dev-arm64
+          name: DeepSeek-Harness-App-dev-arm64
           path: apps/desktop/src-tauri/target/release/bundle/macos/Harness Desktop.app
 
   release-signed:
     needs: checks
     runs-on: macos-15
     environment: desktop-release
-    if: vars.APPLE_SIGNING_IDENTITY != ''
+    if: vars.APPLE_SIGNING_IDENTITY != '' && github.event_name == 'pull_request'
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -116,7 +119,7 @@ jobs:
       - name: Upload release artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: Harness-Desktop-signed-arm64
+          name: DeepSeek-Harness-App-signed-arm64
           path: |
             apps/desktop/src-tauri/target/release/bundle/macos/Harness Desktop.app
             dist-exe/*.dmg

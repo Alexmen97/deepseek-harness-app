@@ -30,16 +30,28 @@ jobs:
     environment: release
     outputs:
       signed: ${{ steps.decide.outputs.signed }}
+      notarized: ${{ steps.decide.outputs.notarized }}
     steps:
       - id: decide
         env:
           HAS_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
           HAS_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          HAS_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          HAS_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          HAS_P8: ${{ secrets.APPLE_API_KEY_P8_BASE64 }}
+          HAS_APPLE_ID: ${{ secrets.APPLE_ID }}
+          HAS_APP_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          HAS_TEAM: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           if [ -n "$HAS_CERTIFICATE" ] && [ -n "$HAS_IDENTITY" ]; then
             echo "signed=true" >> "$GITHUB_OUTPUT"
           else
             echo "signed=false" >> "$GITHUB_OUTPUT"
+          fi
+          if { [ -n "$HAS_API_KEY" ] && [ -n "$HAS_ISSUER" ] && [ -n "$HAS_P8" ]; } || { [ -n "$HAS_APPLE_ID" ] && [ -n "$HAS_APP_PASSWORD" ] && [ -n "$HAS_TEAM" ]; }; then
+            echo "notarized=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "notarized=false" >> "$GITHUB_OUTPUT"
           fi
 
   build:
@@ -48,6 +60,7 @@ jobs:
     environment: release
     outputs:
       signed: ${{ needs.signing-secrets.outputs.signed }}
+      notarized: ${{ needs.signing-secrets.outputs.notarized }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -105,6 +118,15 @@ jobs:
             export APPLE_API_KEY_PATH="$RUNNER_TEMP/AuthKey.p8"
           fi
           node scripts/sign-desktop.mjs --mode developer-id
+      - name: Verify signing identity
+        if: needs.signing-secrets.outputs.signed == 'true'
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        run: |
+          security find-identity -v -p codesigning build.keychain | grep -F "$APPLE_SIGNING_IDENTITY" > /dev/null || {
+            echo "::error::Developer ID identity not found in the imported keychain"
+            exit 1
+          }
       - name: DMG, checksum, release manifest
         run: node scripts/make-desktop-dmg.mjs
       - name: SBOM
@@ -114,16 +136,16 @@ jobs:
       - name: Release verification
         run: node scripts/verify-desktop-release.mjs
       - name: Refuse unsigned tag publication
-        if: needs.signing-secrets.outputs.signed != 'true'
+        if: needs.signing-secrets.outputs.signed != 'true' || needs.signing-secrets.outputs.notarized != 'true'
         env:
           EVENT_NAME: ${{ github.event_name }}
           DRY_RUN: ${{ inputs.dry_run }}
         run: |
           if [ "$EVENT_NAME" = "push" ] || [ "$DRY_RUN" = "false" ]; then
-            echo "::error::Refusing to publish a release without Developer ID signing and notarization"
+            echo "::error::Refusing to publish a release without Developer ID signing and notarization credentials"
             exit 1
           fi
-          echo "Unsigned development artifact produced; NOTARIZATION SKIPPED."
+          echo "Unsigned or unnotarized development artifact produced; signing/notarization skipped (NOTARIZATION SKIPPED)."
       - name: Upload release assets
         uses: actions/upload-artifact@v4
         with:

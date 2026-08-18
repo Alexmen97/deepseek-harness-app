@@ -30,6 +30,7 @@ dist-exe/
 *.p12
 *.p8
 *.cer
+*.key
 *.mobileprovision
 *.keychain-db
 notarization/

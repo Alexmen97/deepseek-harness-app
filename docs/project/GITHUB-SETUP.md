@@ -14,7 +14,30 @@ main stays green through the public CI checks; force pushes are blocked so histo
 
 ## Public CI on main
 
-Pushes to main run the secret scan and the real-API e2e workflow. The e2e workflow skips its build and suite with a warning while the repository secret DEEPSEEK_API_KEY_EXTERNAL is unset, and runs them with the key once the secret exists. The upstream workflows whose push triggers name master (ci, sandbox, release, release-vendor, landlock-run, docs-pages) do not trigger on main; their pull-request triggers may reference upstream organization runner pools and are not adapted for public pull requests. Required status checks in the branch ruleset stay unset until the public CI check names are decided.
+Pushes to main run the desktop validation workflow, the secret scan, and the real-API e2e workflow. The desktop validation workflow runs its checks job on pushes to main and on pull requests touching desktop paths; its unsigned and signed release builds run only on pull requests. The e2e workflow skips its build and suite with a warning while the repository secret DEEPSEEK_API_KEY_EXTERNAL is unset, and runs them with the key once the secret exists.
+
+## Workflow disposition
+
+Upstream workflows that depend on DeepSeek organization infrastructure are disabled in the public repository through the workflow-disable setting, so pull requests never queue on private runners. They stay in the source tree for upstream history and can be re-enabled when their documented condition changes.
+
+| Workflow | Disposition |
+|---|---|
+| Desktop | works on the public repository; push to main, desktop pull requests, manual dispatch |
+| Secret scan | works; every push and pull request |
+| E2E (real DeepSeek API) | adapted; the keyless preflight skips with a warning |
+| Desktop release | works; v* tag or manual dispatch, fail-closed without signing and notarization credentials |
+| CI | upstream-only: enterprise and self-hosted runner pools |
+| Sandbox | upstream-only |
+| Release (dsh), Release (vendor), Release (Python), Build single-exe | upstream-only: npm and PyPI release machinery |
+| Landlock Run, Landlock Run Release | upstream-only: native landlock subtree |
+| Deploy documentation | deferred until GitHub Pages is configured |
+| E2E (E2B sandbox), E2E (pi-ai provider) | upstream-only: manual real-API suites |
+| Issue lifecycle, Issue policy | upstream-only: organization label automation |
+| Expected filenames | upstream-only: naming policy for upstream packages |
+
+## Required checks on main
+
+The branch ruleset requires the desktop validation checks job and the secret scan gitleaks job before merging pull requests. Both run on GitHub-hosted runners and pass without private credentials. The e2e job stays non-blocking while it is keyless.
 
 ## Applied at first publication
 

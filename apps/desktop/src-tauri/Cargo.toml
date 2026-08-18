@@ -3,6 +3,7 @@ name = "harness-desktop"
 version = "0.1.0"
 description = "DeepSeek Harness Desktop — unofficial macOS client over the DeepSeek Harness runtime"
 edition = "2021"
+repository = "https://github.com/Alexmen97/deepseek-harness-app"
 
 [lib]
 name = "harness_desktop_lib"

@@ -18,13 +18,12 @@ DeepSeek Harness App 将打包后的 DeepSeek Harness 运行时封装在 Tauri �
 - 会话、流式回复、工具调用、审批与提问
 - 通过粘贴、拖放或原生选择器添加图片附件
 - API 密钥仅存于 macOS 钥匙串，无明文凭据存储
-- 英文与意大利文界面，支持跟随系统
 - 英语、中文、意大利语、西班牙语、法语、德语和巴西葡萄牙语界面，支持跟随系统
 - 原生菜单、快捷键、通知与关于窗口
 
 ## 安装
 
-1. 从 Releases 下载最新 .dmg。
+1. 从 [Releases](https://github.com/Alexmen97/deepseek-harness-app/releases) 页面下载最新 .dmg。
 2. 打开 DMG。
 3. 将 Harness Desktop 拖入应用程序。
 4. 启动应用。
