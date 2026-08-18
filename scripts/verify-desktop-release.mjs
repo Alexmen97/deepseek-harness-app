@@ -18,6 +18,8 @@ const check = (condition, message) => {
 }
 
 check(existsSync(appPath), 'bundle missing: ' + appPath)
+check(existsSync(resolve(repo, 'LICENSE')), 'repository LICENSE missing')
+check(existsSync(resolve(repo, 'THIRD_PARTY_NOTICES.md')), 'repository THIRD_PARTY_NOTICES.md missing')
 if (!existsSync(appPath)) {
   console.error('verify-desktop-release: FAILED\n' + failures.join('\n'))
   process.exit(1)

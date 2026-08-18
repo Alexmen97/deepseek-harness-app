@@ -1,0 +1,60 @@
+name: Bug report
+description: Report a reproducible defect in the desktop application.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not paste API keys, signing credentials, or other secrets.
+  - type: input
+    id: app-version
+    attributes:
+      label: App version
+      placeholder: e.g. 0.1.0
+    validations:
+      required: true
+  - type: input
+    id: harness-version
+    attributes:
+      label: Harness Engine version
+      placeholder: e.g. 0.1.0-rc.7
+    validations:
+      required: true
+  - type: input
+    id: macos-version
+    attributes:
+      label: macOS version
+      placeholder: e.g. 26.5
+    validations:
+      required: true
+  - type: input
+    id: architecture
+    attributes:
+      label: Architecture
+      placeholder: arm64
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction steps
+      placeholder: Step by step
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Sanitized diagnostics
+      description: Paste the Copy Diagnostics output with any secrets removed.

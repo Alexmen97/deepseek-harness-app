@@ -1,0 +1,173 @@
+name: Desktop release
+
+# Direct GitHub Releases distribution. Tag pushes and manual dispatches
+# produce the signed, notarized, stapled DMG plus checksum and release
+# manifest. Publication is always created as a DRAFT so a maintainer reviews
+# it before it becomes public. A tag release without Developer ID signing
+# fails instead of publishing an unsigned artifact.
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Build and verify without creating a GitHub Release
+        type: boolean
+        default: true
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  signing-secrets:
+    runs-on: ubuntu-latest
+    environment: release
+    outputs:
+      signed: ${{ steps.decide.outputs.signed }}
+    steps:
+      - id: decide
+        env:
+          HAS_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
+          HAS_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        run: |
+          if [ -n "$HAS_CERTIFICATE" ] && [ -n "$HAS_IDENTITY" ]; then
+            echo "signed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  build:
+    needs: signing-secrets
+    runs-on: macos-15
+    environment: release
+    outputs:
+      signed: ${{ needs.signing-secrets.outputs.signed }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Record runner environment
+        run: |
+          uname -m
+          sw_vers
+          node --version
+      - run: pnpm install --frozen-lockfile
+      - name: Desktop tests
+        run: pnpm exec vitest run packages/desktop packages/credentials/credentials-keychain packages/api/gateway packages/api/remotes apps/desktop/tests
+      - name: Rust tests
+        working-directory: apps/desktop/src-tauri
+        run: cargo test --lib
+      - name: Build runtime executable
+        run: node --import tsx/esm scripts/build-exe-for-desktop.ts
+      - name: Build app bundle
+        working-directory: apps/desktop
+        run: pnpm exec tauri build
+      - name: Import signing certificate
+        if: needs.signing-secrets.outputs.signed == 'true'
+        env:
+          APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_KEYCHAIN_PASSWORD: ${{ secrets.APPLE_KEYCHAIN_PASSWORD }}
+        run: |
+          echo -n "$APPLE_CERTIFICATE_BASE64" | base64 --decode > certificate.p12
+          security create-keychain -p "$APPLE_KEYCHAIN_PASSWORD" build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "$APPLE_KEYCHAIN_PASSWORD" build.keychain
+          security import certificate.p12 -k build.keychain -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$APPLE_KEYCHAIN_PASSWORD" build.keychain
+      - name: Sign, notarize, staple
+        if: needs.signing-secrets.outputs.signed == 'true'
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY_P8_BASE64: ${{ secrets.APPLE_API_KEY_P8_BASE64 }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          if [ -n "$APPLE_API_KEY_P8_BASE64" ]; then
+            echo -n "$APPLE_API_KEY_P8_BASE64" | base64 --decode > "$RUNNER_TEMP/AuthKey.p8"
+            export APPLE_API_KEY_PATH="$RUNNER_TEMP/AuthKey.p8"
+          fi
+          node scripts/sign-desktop.mjs --mode developer-id
+      - name: DMG, checksum, release manifest
+        run: node scripts/make-desktop-dmg.mjs
+      - name: Release verification
+        run: node scripts/verify-desktop-release.mjs
+      - name: Refuse unsigned tag publication
+        if: needs.signing-secrets.outputs.signed != 'true'
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          if [ "$EVENT_NAME" = "push" ] || [ "$DRY_RUN" = "false" ]; then
+            echo "::error::Refusing to publish a release without Developer ID signing and notarization"
+            exit 1
+          fi
+          echo "Unsigned development artifact produced; NOTARIZATION SKIPPED."
+      - name: Upload release assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: deepseek-harness-app-release-${{ github.ref_name }}
+          path: |
+            dist-exe/*.dmg
+            dist-exe/*.dmg.sha256
+            dist-exe/*-release-manifest.json
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v') && (github.event_name == 'push' || inputs.dry_run == false)
+    runs-on: macos-15
+    environment: release
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: deepseek-harness-app-release-${{ github.ref_name }}
+          path: dist-exe
+      - name: Tag and app version consistency
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          node -e "const fs=require('fs');const v=JSON.parse(fs.readFileSync('apps/desktop/src-tauri/tauri.conf.json','utf8')).version;if(process.env.TAG!=='v'+v){console.error('tag '+process.env.TAG+' does not match app version '+v);process.exit(1)}"
+      - name: SBOM release gate
+        run: |
+          if [ -z "$(ls dist-exe/*-sbom.cdx.json 2>/dev/null)" ]; then
+            echo "::error::No CycloneDX SBOM in the release assets; the publish gate requires one (see docs/project/SUPPLY-CHAIN.md)"
+            exit 1
+          fi
+      - name: Attest release artifacts
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            dist-exe/*.dmg
+            dist-exe/*.dmg.sha256
+            dist-exe/*-release-manifest.json
+      - name: Create draft GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ github.ref_name }}" \
+            dist-exe/*.dmg \
+            dist-exe/*.dmg.sha256 \
+            dist-exe/*-release-manifest.json \
+            --title "DeepSeek Harness App ${{ github.ref_name }}" \
+            --draft \
+            --prerelease \
+            --generate-notes

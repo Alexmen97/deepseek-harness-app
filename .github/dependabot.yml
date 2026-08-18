@@ -28,6 +28,16 @@ updates:
       - "kind/dependency"
       - "area/infra"
 
+  # Desktop crate tree: the Tauri/Rust closure of apps/desktop.
+  - package-ecosystem: "cargo"
+    directory: "apps/desktop/src-tauri"
+    schedule:
+      interval: "weekly"
+      open-pull-requests-limit: 5
+    labels:
+      - "kind/dependency"
+      - "area/desktop"
+
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:

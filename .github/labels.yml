@@ -1,0 +1,19 @@
+# Intended label set for the public repository. GitHub-native labels plus:
+- name: desktop
+  description: Desktop-specific surface (apps/desktop, packages/desktop)
+  color: 1d4ed8
+- name: macOS
+  description: macOS platform behavior
+  color: 6d3bd8
+- name: upstream
+  description: Upstream patch or upstream-compatibility work
+  color: 0f766e
+- name: security
+  description: Security or credential handling
+  color: b3261e
+- name: release
+  description: Release engineering and distribution
+  color: b45309
+- name: documentation
+  description: Docs-only changes
+  color: 2563eb

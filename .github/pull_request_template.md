@@ -11,3 +11,17 @@
 - 验证：
 
 </details>
+
+<!-- Desktop changes additionally complete this checklist. -->
+<details>
+<summary>Desktop checklist</summary>
+
+- [ ] Tests added or updated for the behavior
+- [ ] Typecheck passes (host and client aggregates)
+- [ ] Lint passes
+- [ ] No secrets or credentials in the diff
+- [ ] Upstream compatibility considered (docs/desktop/UPSTREAM-PATCHES.md)
+- [ ] User-facing docs updated when applicable
+- [ ] Screenshots attached for UI changes
+
+</details>

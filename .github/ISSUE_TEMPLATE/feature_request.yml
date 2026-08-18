@@ -1,0 +1,30 @@
+name: Feature request
+description: Propose a desktop-specific capability.
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What user need does this address?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: The smallest change that solves it, staying within the desktop boundaries in CONTRIBUTING.md.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives
+      description: Other approaches considered.
+  - type: checkboxes
+    id: upstream
+    attributes:
+      label: Upstream compatibility
+      options:
+        - label: This proposal does not require modifying agent-loop or model behavior.
+          required: true

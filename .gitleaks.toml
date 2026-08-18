@@ -1,0 +1,13 @@
+# gitleaks configuration for the public repository.
+#
+# Default gitleaks rules apply. The two upstream e2e fixtures below embed
+# the placeholder string sk-e2efixture1234567890 as task input, never a
+# credential; they are allowlisted so CI does not fail on upstream test
+# fixtures.
+
+[allowlist]
+description = "Upstream e2e fixture placeholders"
+paths = [
+  "examples/headless-agent/tests/fixtures/session-telemetry-otel-driver.ts",
+  "packages/session/session-telemetry-otel/tests/loader-composition.e2e.ts",
+]

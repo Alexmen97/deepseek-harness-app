@@ -5,7 +5,8 @@
  */
 
 import { execFileSync, spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, readFileSync, rmSync, symlinkSync } from 'node:fs'
+import { createHash } from 'node:crypto'
+import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -17,13 +18,17 @@ if (!existsSync(appPath)) {
 }
 
 const conf = JSON.parse(readFileSync(resolve(repo, 'apps/desktop/src-tauri/tauri.conf.json'), 'utf8'))
-const productName = conf.productName.replace(/ /g, '-')
-const dmgPath = resolve(repo, 'dist-exe', productName + '-' + conf.version + '-macOS-arm64.dmg')
+const version = conf.version
+const dmgName = 'DeepSeek-Harness-App-v' + version + '-macOS-arm64.dmg'
+const dmgPath = resolve(repo, 'dist-exe', dmgName)
 const stage = resolve(repo, 'dist-exe', '.dmg-stage')
 rmSync(stage, { recursive: true, force: true })
 mkdirSync(stage, { recursive: true })
 execFileSync('ditto', [appPath, resolve(stage, 'Harness Desktop.app')])
 symlinkSync('/Applications', resolve(stage, 'Applications'))
+// License and notice obligations travel with the binary distribution.
+copyFileSync(resolve(repo, 'LICENSE'), resolve(stage, 'LICENSE.txt'))
+copyFileSync(resolve(repo, 'THIRD_PARTY_NOTICES.md'), resolve(stage, 'THIRD_PARTY_NOTICES.md'))
 
 execFileSync('hdiutil', ['create', '-volname', 'Harness Desktop', '-srcfolder', stage, '-ov', '-format', 'UDZO', dmgPath])
 
@@ -49,3 +54,19 @@ if (layout.status !== 0) {
 
 rmSync(stage, { recursive: true, force: true })
 console.log('make-desktop-dmg: ' + dmgPath)
+
+// Checksum and release manifest for the public release assets.
+const hash = createHash('sha256').update(readFileSync(dmgPath)).digest('hex')
+writeFileSync(dmgPath + '.sha256', hash + '  ' + dmgName + '\n')
+const upstream = JSON.parse(readFileSync(resolve(repo, 'docs/project/upstream-base.json'), 'utf8'))
+const manifest = {
+  version,
+  desktopProtocol: 1,
+  harnessVersion: upstream.version,
+  harnessCommit: upstream.commit,
+  platform: 'macos',
+  arch: 'arm64',
+  sha256: hash,
+}
+writeFileSync(resolve(repo, 'dist-exe', 'DeepSeek-Harness-App-v' + version + '-release-manifest.json'), JSON.stringify(manifest, null, 2) + '\n')
+console.log('make-desktop-dmg: checksum ' + dmgPath + '.sha256')
