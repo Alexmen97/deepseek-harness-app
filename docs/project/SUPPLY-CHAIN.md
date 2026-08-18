@@ -11,12 +11,12 @@ Release engineering for the direct GitHub Releases distribution model.
 
 ## Release outputs
 
-Every public release produces: the notarized DMG (DeepSeek-Harness-App-v<version>-macOS-arm64.dmg), its SHA-256 checksum, a machine-readable release manifest (version, desktop protocol, harness version and commit, platform, architecture, checksum), and a CycloneDX SBOM. The release workflow refuses to publish a stable release without Developer ID signing and notarization, and its publish gate fails closed when the SBOM asset is missing.
+Every public release produces: the notarized DMG (DeepSeek-Harness-App-v<version>-macOS-arm64.dmg), its SHA-256 checksum, a machine-readable release manifest (version, desktop protocol, harness version and commit, platform, architecture, DMG and SBOM filenames, checksum, build commit and timestamp), and a CycloneDX SBOM. The release workflow refuses to publish a stable release without Developer ID signing and notarization, generates the SBOM in every build including dry runs, and its publish gate fails closed when the SBOM asset is missing.
 
 ## Provenance
 
-The release workflow attests the DMG, checksum, and manifest with GitHub artifact attestations before creating the draft release. Reproducible builds are not claimed: the SEA packaging and Apple tooling are not byte-reproducible end to end, and the documentation states that plainly.
+The release workflow attests the DMG, checksum, manifest, and SBOM with GitHub artifact attestations before creating the draft release. Reproducible builds are not claimed: the SEA packaging and Apple tooling are not byte-reproducible end to end, and the documentation states that plainly.
 
 ## SBOM coverage
 
-The SBOM generator is not implemented in M3; the release publish gate fails without a *-sbom.cdx.json asset, so the first public release must add generation before publication. The planned generator uses CycloneDX tooling over the npm workspace and the Rust crate tree. The native libvips binaries inside the sharp prebuild are represented at the component level with their license fields; a fully resolved per-file SBOM for the SEA snapshot is out of scope.
+`pnpm run desktop:sbom` writes `DeepSeek-Harness-App-v<version>-sbom.cdx.json` to `dist-exe/`: a CycloneDX 1.5 document with a deterministic UUIDv5 serial and sorted components. It lists every non-dev package in pnpm-lock.yaml (the packaged runtime closure is a production `pnpm deploy`), every package in the desktop Cargo.lock, and the redistributed native binaries (sharp/libvips under LGPL, node-pty and koffi under MIT) at component level. Licenses come from the installed store manifests when present. Cargo.lock cannot separate build-time from runtime crates, so all crates carry scope `required`; the crate-level approximation and the per-file SEA closure remain documented gaps, not reasons to skip the gate. Repository coordinates come from docs/project/project-metadata.json and the GitHub URL is omitted while the owner is unknown.

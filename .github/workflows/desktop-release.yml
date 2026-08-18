@@ -107,6 +107,10 @@ jobs:
           node scripts/sign-desktop.mjs --mode developer-id
       - name: DMG, checksum, release manifest
         run: node scripts/make-desktop-dmg.mjs
+      - name: SBOM
+        run: pnpm run desktop:sbom
+      - name: Release artifact consistency
+        run: node scripts/check-release-consistency.mjs
       - name: Release verification
         run: node scripts/verify-desktop-release.mjs
       - name: Refuse unsigned tag publication
@@ -128,6 +132,7 @@ jobs:
             dist-exe/*.dmg
             dist-exe/*.dmg.sha256
             dist-exe/*-release-manifest.json
+            dist-exe/*-sbom.cdx.json
           if-no-files-found: error
 
   publish:
@@ -163,6 +168,7 @@ jobs:
             dist-exe/*.dmg
             dist-exe/*.dmg.sha256
             dist-exe/*-release-manifest.json
+            dist-exe/*-sbom.cdx.json
       - name: Create draft GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -171,6 +177,7 @@ jobs:
             dist-exe/*.dmg \
             dist-exe/*.dmg.sha256 \
             dist-exe/*-release-manifest.json \
+            dist-exe/*-sbom.cdx.json \
             --title "DeepSeek Harness App ${{ github.ref_name }}" \
             --draft \
             --prerelease \

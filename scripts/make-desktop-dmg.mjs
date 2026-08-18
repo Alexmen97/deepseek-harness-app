@@ -59,14 +59,24 @@ console.log('make-desktop-dmg: ' + dmgPath)
 const hash = createHash('sha256').update(readFileSync(dmgPath)).digest('hex')
 writeFileSync(dmgPath + '.sha256', hash + '  ' + dmgName + '\n')
 const upstream = JSON.parse(readFileSync(resolve(repo, 'docs/project/upstream-base.json'), 'utf8'))
+const buildCommit = (() => {
+  try { return execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo, encoding: 'utf8' }).trim() }
+  catch { return 'unknown' }
+})()
+const sbomFilename = 'DeepSeek-Harness-App-v' + version + '-sbom.cdx.json'
 const manifest = {
+  schemaVersion: 1,
   version,
   desktopProtocol: 1,
   harnessVersion: upstream.version,
   harnessCommit: upstream.commit,
   platform: 'macos',
   arch: 'arm64',
+  dmgFilename: dmgName,
   sha256: hash,
+  sbomFilename,
+  buildCommit,
+  buildTimestamp: new Date().toISOString(),
 }
 writeFileSync(resolve(repo, 'dist-exe', 'DeepSeek-Harness-App-v' + version + '-release-manifest.json'), JSON.stringify(manifest, null, 2) + '\n')
 console.log('make-desktop-dmg: checksum ' + dmgPath + '.sha256')
