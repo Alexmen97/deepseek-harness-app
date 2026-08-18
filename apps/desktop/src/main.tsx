@@ -5,13 +5,19 @@
  */
 
 import { createRoot } from 'react-dom/client'
-import { Component, type ErrorInfo, type ReactNode } from 'react'
+import { Component, lazy, Suspense, type ErrorInfo, type ReactNode } from 'react'
 import { AppWebEntry } from '@deepseek-ai/dsh-client-web'
 import { DesktopOverlay } from '@deepseek-ai/dsh-desktop-client/src/ui/overlay'
 import { installTauriBindings, requestRuntimeStart } from './tauri-bindings'
 import { DESKTOP_ENTRY_IDS, DESKTOP_STATICS } from './desktop-modules'
 import { assertNoJsExpr } from './boot-guard'
-import { Inspector } from './inspector/Inspector.tsx'
+
+// Lazy so the xterm dependency cannot break the boot path: the overlay must
+// mount and requestRuntimeStart must run even if the Inspector bundle fails.
+const Inspector = lazy(async () => {
+  const module = await import('./inspector/Inspector.tsx')
+  return { default: module.Inspector }
+})
 
 const ROOT_ID = 'root'
 const OVERLAY_ID = 'desktop-overlay'
@@ -95,7 +101,9 @@ const overlayRoot = createRoot(overlay)
 overlayRoot.render(
   <DesktopErrorBoundary>
     <DesktopOverlay />
-    <Inspector />
+    <Suspense fallback={null}>
+      <Inspector />
+    </Suspense>
   </DesktopErrorBoundary>,
 )
 
