@@ -13,6 +13,9 @@ export {
 export type {
   DesktopBindings,
   DesktopCredentialStatus,
+  DesktopFsEntry,
+  DesktopGitDiff,
+  DesktopGitStatus,
   DesktopHost,
   DesktopRuntimeFrame,
   DesktopRuntimeLifecycle,

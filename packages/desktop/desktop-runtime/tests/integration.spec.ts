@@ -13,7 +13,7 @@ async function initializeAndCreateSession(runtime: LaunchedRuntime): Promise<{ w
     models: true,
     approvals: true,
     questions: true,
-    terminal: false,
+    terminal: true,
     keychain: true,
   })
   runtime.client.request('workspace.create', { rpcId: 'w1', payload: { path: runtime.workspace } }, 'ws')

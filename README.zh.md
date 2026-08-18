@@ -77,7 +77,7 @@ API 密钥仅存于 macOS 钥匙串，前端不会读回。WebView 只加载内�
 
 ## 上游
 
-本仓库派生自[deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness)（MIT），固定版本记录于[docs/project/upstream-base.json](docs/project/upstream-base.json)。上游历史完整保留；桌面新增内容与三处上游补丁见[docs/project/REPOSITORY-STRUCTURE.md](docs/project/REPOSITORY-STRUCTURE.md) 与[docs/desktop/UPSTREAM-PATCHES.md](docs/desktop/UPSTREAM-PATCHES.md)。
+本仓库派生自[deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness)（MIT），固定版本记录于[docs/project/upstream-base.json](docs/project/upstream-base.json)。上游历史完整保留；桌面新增内容与四处上游补丁见[docs/project/REPOSITORY-STRUCTURE.md](docs/project/REPOSITORY-STRUCTURE.md) 与[docs/desktop/UPSTREAM-PATCHES.md](docs/desktop/UPSTREAM-PATCHES.md)。
 
 ## 参与贡献
 

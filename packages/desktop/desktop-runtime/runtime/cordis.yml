@@ -168,6 +168,16 @@
   config:
     providerName: spawn
 
+# M4 interactive terminal: the PTY service and its macOS bash backend. The
+# desktop JSON-RPC server exposes the service through desktop.terminal.*.
+- id: terminal
+  name: '@deepseek-ai/dsh-terminal'
+
+- id: terminal-bash
+  name: '@deepseek-ai/dsh-terminal-bash'
+  config:
+    backendType: bash
+
 # Native directory picker backend (the gateway service requires the seam).
 - id: directory-picker
   name: '@deepseek-ai/dsh-host-directory-picker-native'

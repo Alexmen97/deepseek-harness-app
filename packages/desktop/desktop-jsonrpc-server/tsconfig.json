@@ -34,6 +34,15 @@
     },
     {
       "path": "../desktop-protocol"
+    },
+    {
+      "path": "../../terminal/terminal"
+    },
+    {
+      "path": "../../core/agent"
+    },
+    {
+      "path": "../../core/session"
     }
   ]
 }

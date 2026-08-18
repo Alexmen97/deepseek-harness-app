@@ -11,6 +11,7 @@ import { DesktopOverlay } from '@deepseek-ai/dsh-desktop-client/src/ui/overlay'
 import { installTauriBindings, requestRuntimeStart } from './tauri-bindings'
 import { DESKTOP_ENTRY_IDS, DESKTOP_STATICS } from './desktop-modules'
 import { assertNoJsExpr } from './boot-guard'
+import { Inspector } from './inspector/Inspector.tsx'
 
 const ROOT_ID = 'root'
 const OVERLAY_ID = 'desktop-overlay'
@@ -21,17 +22,17 @@ const OVERLAY_ID = 'desktop-overlay'
  * while the interface shows a recoverable error screen.
  */
 class DesktopErrorBoundary extends Component<{ children: ReactNode }, { error: Error | undefined }> {
-  state: { error: Error | undefined } = { error: undefined }
+  override state: { error: Error | undefined } = { error: undefined }
 
   static getDerivedStateFromError(error: Error): { error: Error } {
     return { error }
   }
 
-  componentDidCatch(error: Error, info: ErrorInfo): void {
+  override componentDidCatch(error: Error, info: ErrorInfo): void {
     console.error('[desktop] overlay rendering failed:', error, info.componentStack)
   }
 
-  render(): ReactNode {
+  override render(): ReactNode {
     if (this.state.error !== undefined) {
       return (
         <div role="alert" style={{ padding: '2rem', fontFamily: 'system-ui', color: '#181a20', background: '#fff', minHeight: '100vh' }}>
@@ -94,6 +95,7 @@ const overlayRoot = createRoot(overlay)
 overlayRoot.render(
   <DesktopErrorBoundary>
     <DesktopOverlay />
+    <Inspector />
   </DesktopErrorBoundary>,
 )
 

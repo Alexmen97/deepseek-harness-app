@@ -55,8 +55,8 @@ export interface DesktopCapabilities {
   models: boolean
   /** Image attachments are served (attachment store mounted). */
   attachments: boolean
-  /** Interactive terminal sessions; false until the desktop terminal domain lands. */
-  terminal: false
+  /** Interactive terminal sessions served by the desktop terminal domain. */
+  terminal: boolean
   /** Whether the desktop host answers credential requests from the macOS Keychain. */
   keychain: boolean
 }
@@ -191,6 +191,132 @@ export interface DesktopRequestMap {
   'llm.providers': { params: DesktopRequestEnvelope<RequestPayload<'llm.providers'>>; result: DesktopResponseEnvelope<ResponseValue<'llm.providers'>> }
   'llm.models': { params: DesktopRequestEnvelope<RequestPayload<'llm.models'>>; result: DesktopResponseEnvelope<ResponseValue<'llm.models'>> }
   'respond': { params: ClientResponse; result: RpcReceipt }
+  'desktop.terminal.spawn': { params: DesktopTerminalSpawnParams; result: DesktopTerminalSpawnResult }
+  'desktop.terminal.send': { params: DesktopTerminalSendParams; result: DesktopTerminalSendResult }
+  'desktop.terminal.signal': { params: DesktopTerminalSignalParams; result: DesktopTerminalSignalResult }
+  'desktop.terminal.resize': { params: DesktopTerminalResizeParams; result: DesktopTerminalResizeResult }
+  'desktop.terminal.read': { params: DesktopTerminalReadParams; result: DesktopTerminalReadResult }
+  'desktop.terminal.kill': { params: DesktopTerminalKillParams; result: DesktopTerminalKillResult }
+  'desktop.terminal.list': { params: DesktopTerminalListParams; result: DesktopTerminalListResult }
+}
+
+/** Wire-stable terminal request/result shapes for the M4 terminal domain. */
+/** Request to create one interactive PTY for a live session's agent. */
+export interface DesktopTerminalSpawnParams {
+  /** Session whose agent owns the PTY (resolved through the live agent registry). */
+  sessionId: string
+  /** Optional owner-local display name. */
+  name?: string
+}
+
+/** Published PTY identity and its initial bounded output. */
+export interface DesktopTerminalSpawnResult {
+  /** Wire identity of the published PTY session. */
+  terminalId: string
+  /** Initial bounded output captured before publication. */
+  motd: string
+}
+
+/** One line-oriented input write to a published PTY. */
+export interface DesktopTerminalSendParams {
+  sessionId: string
+  terminalId: string
+  /** UTF-8 text to write. */
+  text: string
+  /** Whether to write the backend's Enter sequence after the text. */
+  submit: boolean
+}
+
+/** Settled send outcome with the remaining rendered viewport. */
+export interface DesktopTerminalSendResult {
+  /** Remaining rendered output at settlement. */
+  viewport: string
+  /** Whether output was dropped from the operation or retained scrollback. */
+  truncated: boolean
+  /** Top-level process status observed at settlement. */
+  status: { kind: 'running' } | { kind: 'exited'; exitCode: number | null; signal: string | null }
+}
+
+/** Signal delivery to a PTY's verified foreground process group. */
+export interface DesktopTerminalSignalParams {
+  sessionId: string
+  terminalId: string
+  signal: 'SIGINT' | 'SIGTERM' | 'SIGKILL' | 'SIGTSTP' | 'SIGHUP'
+}
+
+/** Signal delivery acknowledgment. */
+export interface DesktopTerminalSignalResult {
+  /** True only after the backend delivered the signal. */
+  delivered: boolean
+}
+
+/** Viewport resize request in character cells. */
+export interface DesktopTerminalResizeParams {
+  sessionId: string
+  terminalId: string
+  /** New width in character cells. */
+  columns: number
+  /** New height in character cells. */
+  rows: number
+}
+
+/** Viewport resize acknowledgment. */
+export interface DesktopTerminalResizeResult {
+  /** True when the backend applied the new viewport. */
+  resized: boolean
+}
+
+/** Scrollback page request for a PTY session. */
+export interface DesktopTerminalReadParams {
+  sessionId: string
+  terminalId: string
+  offset?: number
+  count?: number
+}
+
+/** One bounded scrollback page. */
+export interface DesktopTerminalReadResult {
+  text: string
+  totalLines: number
+  lineBegin: number
+  lineEnd: number
+  truncated: boolean
+}
+
+/** Termination request for one PTY session. */
+export interface DesktopTerminalKillParams {
+  sessionId: string
+  terminalId: string
+}
+
+/** Termination acknowledgment. */
+export interface DesktopTerminalKillResult {
+  killed: boolean
+}
+
+/** Session-scoped listing request for published PTYs. */
+export interface DesktopTerminalListParams {
+  sessionId: string
+}
+
+/** Session-scoped PTY snapshot list. */
+export interface DesktopTerminalListResult {
+  terminals: Array<{
+    terminalId: string
+    name?: string
+    status: { kind: 'running' } | { kind: 'exited'; exitCode: number | null; signal: string | null }
+  }>
+}
+
+/** Terminal output push delivered through the desktop.terminal.output notification. */
+export interface DesktopTerminalOutputNotification {
+  sessionId: string
+  terminalId: string
+  /** 'delta' carries incremental output; 'settled' carries the final status. */
+  kind: 'delta' | 'settled'
+  text?: string
+  truncated?: boolean
+  status?: { kind: 'running' } | { kind: 'exited'; exitCode: number | null; signal: string | null }
 }
 
 /** Server-to-client notification payloads by JSON-RPC method name. */
@@ -198,4 +324,5 @@ export interface DesktopNotificationMap {
   'events.mux': RpcRequest<MuxFrame>
   'events.host': RpcRequest<HostFrame>
   'desktop.status': DesktopStatusNotification
+  'desktop.terminal.output': DesktopTerminalOutputNotification
 }

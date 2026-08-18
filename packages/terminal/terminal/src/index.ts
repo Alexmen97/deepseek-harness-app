@@ -276,6 +276,22 @@ export class TerminalSessionService extends Service {
   }
 
   /**
+   * Resize one owned PTY session's viewport.
+   * @param owner - exact registered Agent that owns the session.
+   * @param id - published session identity.
+   * @param columns - new width in character cells.
+   * @param rows - new height in character cells.
+   */
+  resize(owner: Agent, id: TerminalSessionId, columns: number, rows: number): void {
+    if (!Number.isSafeInteger(columns) || !Number.isSafeInteger(rows) || columns < 2 || rows < 2) {
+      throw new TerminalError('PTY resize requires positive cell dimensions', 'NO_SESSION')
+    }
+    const session = this.expectOwned(owner, id).session
+    if (session.resize === undefined) throw new TerminalError('PTY backend does not support resize', 'NO_BACKEND')
+    session.resize(columns, rows)
+  }
+
+  /**
    * Close one owned session and remove it only after quiescent backend cleanup.
    * @param owner - exact session owner.
    * @param id - target PTY identity.

@@ -49,6 +49,8 @@ interface TerminalBackendSession {
   read(request: TerminalReadRequest): TerminalReadResult
   /** Signal the verified foreground process group. */
   signal(signal: TerminalSignal): Promise<TerminalSignalResult>
+  /** Resize the backend viewport in character cells. */
+  resize?(columns: number, rows: number): void
   /** Observe top-level process status. */
   status(): TerminalSessionStatus
   /** Idempotently close the captured owned process tree and await quiescence. */
@@ -160,6 +162,15 @@ read(owner: Agent, id: TerminalSessionId, request: TerminalReadRequest = {}): Te
  * @returns delivered foreground process-group identity.
  */
 signal(owner: Agent, id: TerminalSessionId, signal: TerminalSignal): Promise<TerminalSignalResult>
+
+/**
+ * Resize one owned PTY session's viewport.
+ * @param owner - exact registered Agent that owns the session.
+ * @param id - published session identity.
+ * @param columns - new width in character cells.
+ * @param rows - new height in character cells.
+ */
+resize(owner: Agent, id: TerminalSessionId, columns: number, rows: number): void
 
 /**
  * Close one owned session and remove it only after quiescent backend cleanup.

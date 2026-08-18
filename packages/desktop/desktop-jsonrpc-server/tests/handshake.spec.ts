@@ -28,7 +28,7 @@ describe('desktop handshake', () => {
         approvals: true,
         questions: true,
         attachments: true,
-        terminal: false,
+        terminal: true,
         keychain: false,
       },
     })

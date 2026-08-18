@@ -573,7 +573,7 @@ export interface Config {
 
 ## `@deepseek-ai/dsh-desktop-jsonrpc-server`
 
-需要：`apiProxy` · `desktopRuntimeInfo`
+需要：`apiProxy` · `desktopRuntimeInfo` · `terminals` · `agents`
 
 ```ts config-catalog
 /** JSON-RPC deployment config plus runtime-only test hooks. */
@@ -595,7 +595,7 @@ export interface JsonRpcConfig {
 
 依赖：`Readable`（`node:stream`）· `Writable`（`node:stream`）
 
-来源：[`packages/desktop/desktop-jsonrpc-server/src/index.ts:89`](../packages/desktop/desktop-jsonrpc-server/src/index.ts)
+来源：[`packages/desktop/desktop-jsonrpc-server/src/index.ts:92`](../packages/desktop/desktop-jsonrpc-server/src/index.ts)
 
 <a id="deepseek-aidsh-e2b"></a>
 

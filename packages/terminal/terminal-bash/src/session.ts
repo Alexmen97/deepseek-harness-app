@@ -345,6 +345,11 @@ export class LocalPtySession implements TerminalBackendSession {
     return { delivered: true, targetPgid }
   }
 
+  resize(columns: number, rows: number): void {
+    if (this.closing) throw new Error('PTY session is closing')
+    this.terminal.resize?.(columns, rows)
+  }
+
   status(): TerminalSessionStatus {
     return this.statusValue
   }

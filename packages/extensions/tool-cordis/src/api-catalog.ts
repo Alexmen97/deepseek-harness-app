@@ -1812,6 +1812,11 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'delivered foreground process-group identity.',
       },
       {
+        signature: 'resize(owner: Agent, id: TerminalSessionId, columns: number, rows: number): void',
+        description: 'Resize one owned PTY session\'s viewport.',
+        parameters: [{ name: 'owner', description: 'exact registered Agent that owns the session.' }, { name: 'id', description: 'published session identity.' }, { name: 'columns', description: 'new width in character cells.' }, { name: 'rows', description: 'new height in character cells.' }],
+      },
+      {
         signature: 'async kill(owner: Agent, id: TerminalSessionId, reason: string = \'model request\'): Promise<boolean>',
         description: 'Close one owned session and remove it only after quiescent backend cleanup.',
         parameters: [{ name: 'owner', description: 'exact session owner.' }, { name: 'id', description: 'target PTY identity.' }, { name: 'reason', description: 'diagnostic cleanup reason.' }],
@@ -4239,7 +4244,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'SubprocessTerminalHandle',
-    declaration: 'export interface SubprocessTerminalHandle {\n    readonly pid: number;\n    readonly output: Readable;\n    readonly done: Promise<SubprocessOutcome>;\n    write(data: string): Promise<void>;\n    inspectForeground(): Promise<SubprocessTerminalForeground | undefined>;\n    signalForeground(signal: SubprocessTerminalSignal): Promise<number>;\n    terminate(): Promise<void>;\n}',
+    declaration: 'export interface SubprocessTerminalHandle {\n    readonly pid: number;\n    readonly output: Readable;\n    readonly done: Promise<SubprocessOutcome>;\n    write(data: string): Promise<void>;\n    resize?(columns: number, rows: number): void;\n    inspectForeground(): Promise<SubprocessTerminalForeground | undefined>;\n    signalForeground(signal: SubprocessTerminalSignal): Promise<number>;\n    terminate(): Promise<void>;\n}',
   },
   {
     name: 'SubprocessTerminalSignal',
@@ -4279,7 +4284,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'TerminalBackendSession',
-    declaration: 'export interface TerminalBackendSession {\n    readonly motd: string;\n    readonly pid?: number;\n    startSend(request: TerminalSendRequest): TerminalSendOperation;\n    read(request: TerminalReadRequest): TerminalReadResult;\n    signal(signal: TerminalSignal): Promise<TerminalSignalResult>;\n    status(): TerminalSessionStatus;\n    close(reason: string): Promise<void>;\n}',
+    declaration: 'export interface TerminalBackendSession {\n    readonly motd: string;\n    readonly pid?: number;\n    startSend(request: TerminalSendRequest): TerminalSendOperation;\n    read(request: TerminalReadRequest): TerminalReadResult;\n    signal(signal: TerminalSignal): Promise<TerminalSignalResult>;\n    resize?(columns: number, rows: number): void;\n    status(): TerminalSessionStatus;\n    close(reason: string): Promise<void>;\n}',
   },
   {
     name: 'TerminalBackendSpawnSpec',

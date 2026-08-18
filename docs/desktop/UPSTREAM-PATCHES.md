@@ -18,4 +18,10 @@ Patch: the Host build face filters its workspace to the packages whose lib/types
 
 Effect if upstream adopts it: identical filter; the desktop-specific reason (client-only desktop packages joined the Client aggregate) disappears but the clean-tree failure affects any client-only package, so the filter remains correct. Upstream PR candidate: the same exists-based Host workspace filter.
 
+## packages/subprocess and packages/terminal (terminal resize)
+
+Patch: an additive optional resize(columns, rows) on the subprocess terminal handle and the terminal backend session, a terminals.resize service method, and the node-pty resize call in the bash backend. The M4 integrated terminal needs viewport resizing; providers without a viewport control (E2B) keep the method absent and the service rejects resize with NO_BACKEND.
+
+Effect if upstream adopts it: the optional member is backward-compatible for every existing provider and test double. Upstream PR candidate: the same optional seam member.
+
 No other upstream file is modified.

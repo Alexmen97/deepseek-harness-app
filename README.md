@@ -77,7 +77,7 @@ See [ROADMAP.md](ROADMAP.md).
 
 ## Upstream
 
-This repository is derived from [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) (MIT), pinned to the version recorded in [docs/project/upstream-base.json](docs/project/upstream-base.json). The upstream history is preserved; the desktop additions and the three upstream patches are listed in [docs/project/REPOSITORY-STRUCTURE.md](docs/project/REPOSITORY-STRUCTURE.md) and [docs/desktop/UPSTREAM-PATCHES.md](docs/desktop/UPSTREAM-PATCHES.md).
+This repository is derived from [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) (MIT), pinned to the version recorded in [docs/project/upstream-base.json](docs/project/upstream-base.json). The upstream history is preserved; the desktop additions and the four upstream patches are listed in [docs/project/REPOSITORY-STRUCTURE.md](docs/project/REPOSITORY-STRUCTURE.md) and [docs/desktop/UPSTREAM-PATCHES.md](docs/desktop/UPSTREAM-PATCHES.md).
 
 ## Contributing
 

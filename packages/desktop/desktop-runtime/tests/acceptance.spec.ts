@@ -64,7 +64,7 @@ describe.skipIf(!exists)('packaged desktop runtime acceptance', () => {
         workspaces: true,
         approvals: true,
         questions: true,
-        terminal: false,
+        terminal: true,
         keychain: true,
       },
     })

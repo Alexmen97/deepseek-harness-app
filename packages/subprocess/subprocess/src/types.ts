@@ -245,6 +245,13 @@ export interface SubprocessTerminalHandle {
    */
   write(data: string): Promise<void>
   /**
+   * Resize the terminal's viewport in character cells. Providers that cannot
+   * resize synchronously keep the call best-effort and must not reject.
+   * @param columns - new viewport width.
+   * @param rows - new viewport height.
+   */
+  resize?(columns: number, rows: number): void
+  /**
    * Inspect the current foreground process group.
    * @returns its id and input-wait fact, or undefined when no foreground group can be resolved.
    */

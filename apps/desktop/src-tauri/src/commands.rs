@@ -5,6 +5,8 @@
  */
 
 use serde_json::{json, Value};
+use std::path::{Component, Path, PathBuf};
+use std::process::Command;
 use tauri::{Manager, State};
 
 use crate::manager::{self, RuntimeManager, RuntimeState};
@@ -14,6 +16,11 @@ pub struct LanguageState(pub std::sync::Mutex<String>);
 
 /// The seven application languages the native surfaces serve.
 pub const MENU_LANGUAGES: [&str; 7] = ["en", "zh", "it", "es", "fr", "de", "pt-BR"];
+
+/// Workspace-scoped caps for the M4 inspector surface.
+const FS_LIST_MAX_ENTRIES: usize = 500;
+const FS_READ_MAX_BYTES: usize = 512 * 1024;
+const GIT_DIFF_MAX_BYTES: usize = 512 * 1024;
 
 /// Upstream attachment-local defaults mirrored by the native picker
 /// (packages/attachment/attachment-local/src/index.ts).
@@ -300,6 +307,334 @@ fn prefs_path(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
         .map_err(|error| format!("app data dir unavailable: {error}"))?;
     std::fs::create_dir_all(&dir).map_err(|error| error.to_string())?;
     Ok(dir.join("prefs.json"))
+}
+
+/// Resolve the pinned workspace root from preferences; fail without one.
+fn workspace_root(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    let raw = std::fs::read_to_string(prefs_path(app)?).unwrap_or_default();
+    let value: Value = if raw.trim().is_empty() {
+        Value::Object(serde_json::Map::new())
+    } else {
+        serde_json::from_str(&raw).map_err(|error| format!("prefs parse failed: {error}"))?
+    };
+    let root = value
+        .get("workspace")
+        .and_then(Value::as_str)
+        .ok_or("no workspace selected")?;
+    let path = PathBuf::from(root);
+    if !path.is_absolute() || !path.is_dir() {
+        return Err(format!("workspace is unavailable: {}", path.display()));
+    }
+    path.canonicalize().map_err(|error| format!("workspace resolve failed: {error}"))
+}
+
+/// Contain one workspace-relative path: no absolute input, no parent escape,
+/// and no symlink target outside the canonical root.
+fn contained_path(root: &Path, rel: &str) -> Result<PathBuf, String> {
+    let root = root.canonicalize().map_err(|error| format!("workspace resolve failed: {error}"))?;
+    if rel.is_empty() {
+        return Ok(root);
+    }
+    if rel.starts_with('/') || rel.contains('\\') || rel.contains(':') {
+        return Err("invalid relative path".into());
+    }
+    let mut base = root.to_path_buf();
+    for component in Path::new(rel).components() {
+        match component {
+            Component::Normal(part) => base.push(part),
+            Component::CurDir => {}
+            Component::ParentDir | Component::RootDir | Component::Prefix(_) => {
+                return Err("path escapes the workspace".into())
+            }
+        }
+    }
+    let canonical = base.canonicalize().map_err(|error| format!("path unavailable: {error}"))?;
+    if !canonical.starts_with(&root) {
+        return Err("path escapes the workspace".into());
+    }
+    Ok(canonical)
+}
+
+/// One directory entry for the M4 file explorer (names and kinds only).
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FsEntry {
+    pub name: String,
+    pub path: String,
+    pub is_dir: bool,
+}
+
+/// List one directory level under the workspace (bounded, sorted dirs-first).
+#[tauri::command]
+pub fn fs_list(app: tauri::AppHandle, path: String) -> Result<Vec<FsEntry>, String> {
+    let root = workspace_root(&app)?;
+    list_dir(&root, &path)
+}
+
+/// Directory listing body, separated from the workspace lookup for tests.
+fn list_dir(root: &Path, path: &str) -> Result<Vec<FsEntry>, String> {
+    let target = contained_path(root, path)?;
+    let mut entries = Vec::new();
+    let mut seen = 0usize;
+    for item in std::fs::read_dir(&target).map_err(|error| format!("cannot list directory: {error}"))? {
+        let item = item.map_err(|error| format!("cannot read entry: {error}"))?;
+        seen += 1;
+        if seen > FS_LIST_MAX_ENTRIES {
+            return Err(format!("directory exceeds the {FS_LIST_MAX_ENTRIES}-entry limit"));
+        }
+        let name = item.file_name().to_string_lossy().to_string();
+        if name == ".git" { continue }
+        let is_dir = item.file_type().map(|kind| kind.is_dir()).unwrap_or(false);
+        let rel = if path.is_empty() {
+            name.clone()
+        } else {
+            format!("{}/{}", path.trim_end_matches('/'), name)
+        };
+        entries.push(FsEntry { name, path: rel, is_dir });
+    }
+    entries.sort_by(|left, right| {
+        right.is_dir.cmp(&left.is_dir).then_with(|| left.name.to_lowercase().cmp(&right.name.to_lowercase()))
+    });
+    Ok(entries)
+}
+
+/// Read one workspace file as a size-capped UTF-8 text preview.
+#[tauri::command]
+pub fn fs_read_text(app: tauri::AppHandle, path: String) -> Result<String, String> {
+    let root = workspace_root(&app)?;
+    read_text_file(&root, &path)
+}
+
+/// Text preview body, separated from the workspace lookup for tests.
+fn read_text_file(root: &Path, path: &str) -> Result<String, String> {
+    let target = contained_path(root, path)?;
+    let metadata = std::fs::metadata(&target).map_err(|error| format!("cannot stat file: {error}"))?;
+    if metadata.is_dir() {
+        return Err("expected a file, got a directory".into());
+    }
+    if metadata.len() > FS_READ_MAX_BYTES as u64 {
+        return Err(format!("file exceeds the {}-byte preview limit", FS_READ_MAX_BYTES));
+    }
+    let bytes = std::fs::read(&target).map_err(|error| format!("cannot read file: {error}"))?;
+    if bytes.iter().take(8192).any(|byte| *byte == 0) {
+        return Err("binary files cannot be previewed".into());
+    }
+    Ok(String::from_utf8_lossy(&bytes).to_string())
+}
+
+/// Reveal one workspace file or directory in Finder (narrow reveal-only).
+#[tauri::command]
+pub fn reveal_in_path(app: tauri::AppHandle, path: String) -> Result<(), String> {
+    let root = workspace_root(&app)?;
+    let target = contained_path(&root, &path)?;
+    let status = Command::new("open")
+        .args(["-R", target.to_string_lossy().as_ref()])
+        .status()
+        .map_err(|error| format!("cannot reveal path: {error}"))?;
+    if !status.success() {
+        return Err(format!("reveal failed with status {status}"));
+    }
+    Ok(())
+}
+
+/// Structured read-only git status for the workspace.
+#[tauri::command]
+pub fn git_status(app: tauri::AppHandle) -> Result<Value, String> {
+    let root = workspace_root(&app)?;
+    git_status_at(&root)
+}
+
+/// Git status body over an explicit root for tests.
+fn git_status_at(root: &Path) -> Result<Value, String> {
+    let inside = Command::new("git")
+        .args(["-C", root.to_string_lossy().as_ref(), "rev-parse", "--is-inside-work-tree"])
+        .output();
+    match inside {
+        Err(_) => return Ok(json!({ "repository": false, "reason": "git-not-found" })),
+        Ok(output) if !output.status.success() => return Ok(json!({ "repository": false, "reason": "no-repository" })),
+        Ok(_) => {}
+    }
+    let porcelain = Command::new("git")
+        .args(["-C", root.to_string_lossy().as_ref(), "status", "--porcelain=v1"])
+        .output()
+        .map_err(|error| format!("git status failed: {error}"))?;
+    if !porcelain.status.success() {
+        return Err("git status failed".into());
+    }
+    let branch = Command::new("git")
+        .args(["-C", root.to_string_lossy().as_ref(), "rev-parse", "--abbrev-ref", "HEAD"])
+        .output()
+        .ok()
+        .filter(|output| output.status.success())
+        .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_string());
+    let text = String::from_utf8_lossy(&porcelain.stdout);
+    let mut files = Vec::new();
+    for line in text.lines() {
+        if line.len() < 4 { continue }
+        let status_code = line[..2].trim();
+        let file_path = line[3..].trim().to_string();
+        if file_path.is_empty() { continue }
+        files.push(json!({ "path": file_path, "status": status_code }));
+    }
+    let dirty = !files.is_empty();
+    Ok(json!({ "repository": true, "branch": branch, "dirty": dirty, "changedFiles": files.len(), "files": files }))
+}
+
+/// Read-only unified diff for tracked changes plus the untracked path list.
+#[tauri::command]
+pub fn git_diff(app: tauri::AppHandle) -> Result<Value, String> {
+    let root = workspace_root(&app)?;
+    git_diff_at(&root)
+}
+
+/// Git diff body over an explicit root for tests.
+fn git_diff_at(root: &Path) -> Result<Value, String> {
+    let inside = Command::new("git")
+        .args(["-C", root.to_string_lossy().as_ref(), "rev-parse", "--is-inside-work-tree"])
+        .output();
+    match inside {
+        Err(_) => return Ok(json!({ "repository": false, "reason": "git-not-found" })),
+        Ok(output) if !output.status.success() => return Ok(json!({ "repository": false, "reason": "no-repository" })),
+        Ok(_) => {}
+    }
+    let diff = Command::new("git")
+        .args(["-C", root.to_string_lossy().as_ref(), "diff", "--no-color", "--no-ext-diff"])
+        .output()
+        .map_err(|error| format!("git diff failed: {error}"))?;
+    if !diff.status.success() {
+        return Err("git diff failed".into());
+    }
+    let diff_text = String::from_utf8_lossy(&diff.stdout);
+    if diff_text.len() > GIT_DIFF_MAX_BYTES {
+        return Err(format!("diff exceeds the {}-byte limit", GIT_DIFF_MAX_BYTES));
+    }
+    let porcelain = Command::new("git")
+        .args(["-C", root.to_string_lossy().as_ref(), "status", "--porcelain=v1"])
+        .output()
+        .ok()
+        .filter(|output| output.status.success())
+        .map(|output| String::from_utf8_lossy(&output.stdout).to_string())
+        .unwrap_or_default();
+    let untracked: Vec<&str> = porcelain
+        .lines()
+        .filter(|line| line.starts_with("?? "))
+        .filter_map(|line| line.get(3..).map(str::trim))
+        .collect();
+    Ok(json!({ "repository": true, "diff": diff_text, "untracked": untracked }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+
+    fn fixture_root(label: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("harness-desktop-{label}-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).expect("fixture dir");
+        dir
+    }
+
+    #[test]
+    fn containment_rejects_escapes_and_allows_normal_paths() {
+        let root = fixture_root("containment");
+        fs::create_dir_all(root.join("sub")).unwrap();
+        fs::write(root.join("file.txt"), "hello").unwrap();
+
+        assert!(contained_path(&root, "").is_ok());
+        assert!(contained_path(&root, "/etc").is_err());
+        assert!(contained_path(&root, "../etc").is_err());
+        assert!(contained_path(&root, "sub/../../etc").is_err());
+        assert_eq!(contained_path(&root, "file.txt").unwrap().file_name().unwrap(), "file.txt");
+        assert_eq!(contained_path(&root, "sub").unwrap().file_name().unwrap(), "sub");
+
+        #[cfg(unix)]
+        {
+            std::os::unix::fs::symlink(std::env::temp_dir(), root.join("escape")).unwrap();
+            assert!(contained_path(&root, "escape").is_err());
+        }
+    }
+
+    #[test]
+    fn directory_listing_sorts_dirs_first_and_hides_git() {
+        let root = fixture_root("listing");
+        fs::create_dir_all(root.join("zeta-dir")).unwrap();
+        fs::create_dir_all(root.join("alpha-dir")).unwrap();
+        fs::create_dir_all(root.join(".git")).unwrap();
+        fs::write(root.join("beta.txt"), "x").unwrap();
+        let entries = list_dir(&root, "").unwrap();
+        let names: Vec<String> = entries.iter().map(|entry| entry.name.clone()).collect();
+        assert_eq!(names, vec!["alpha-dir", "zeta-dir", "beta.txt"]);
+        assert!(entries[0].is_dir && !entries[2].is_dir);
+    }
+
+    #[test]
+    fn text_preview_rejects_binary_and_missing_files() {
+        let root = fixture_root("preview");
+        fs::write(root.join("ok.txt"), "hello world").unwrap();
+        fs::write(root.join("bin.dat"), [0u8, 1, 2, 3]).unwrap();
+        assert_eq!(read_text_file(&root, "ok.txt").unwrap(), "hello world");
+        assert!(read_text_file(&root, "bin.dat").is_err());
+        assert!(read_text_file(&root, "missing.txt").is_err());
+    }
+
+    #[test]
+    fn git_status_reports_clean_dirty_and_missing_repositories() {
+        let root = fixture_root("git-status");
+        assert_eq!(git_status_at(&root).unwrap()["repository"], false);
+
+        let git = |args: &[&str]| {
+            Command::new("git")
+                .current_dir(&root)
+                .args(args)
+                .output()
+                .expect("git available")
+        };
+        assert!(git(&["init", "-q", "-b", "main"]).status.success());
+        assert!(git(&["config", "user.email", "m4@example.test"]).status.success());
+        assert!(git(&["config", "user.name", "M4 Test"]).status.success());
+        fs::write(root.join("tracked.txt"), "one").unwrap();
+        assert!(git(&["add", "tracked.txt"]).status.success());
+        assert!(git(&["commit", "-q", "-m", "initial"]).status.success());
+
+        let clean = git_status_at(&root).unwrap();
+        assert_eq!(clean["repository"], true);
+        assert_eq!(clean["branch"], "main");
+        assert_eq!(clean["dirty"], false);
+
+        fs::write(root.join("tracked.txt"), "two").unwrap();
+        fs::write(root.join("untracked.txt"), "new").unwrap();
+        let dirty = git_status_at(&root).unwrap();
+        assert_eq!(dirty["dirty"], true);
+        assert_eq!(dirty["changedFiles"], 2);
+    }
+
+    #[test]
+    fn git_diff_returns_unified_text_and_untracked_paths() {
+        let root = fixture_root("git-diff");
+        let git = |args: &[&str]| {
+            Command::new("git")
+                .current_dir(&root)
+                .args(args)
+                .output()
+                .expect("git available")
+        };
+        assert!(git(&["init", "-q", "-b", "main"]).status.success());
+        assert!(git(&["config", "user.email", "m4@example.test"]).status.success());
+        assert!(git(&["config", "user.name", "M4 Test"]).status.success());
+        fs::write(root.join("a.txt"), "before").unwrap();
+        assert!(git(&["add", "a.txt"]).status.success());
+        assert!(git(&["commit", "-q", "-m", "initial"]).status.success());
+        fs::write(root.join("a.txt"), "after").unwrap();
+        fs::write(root.join("new.txt"), "fresh").unwrap();
+
+        let result = git_diff_at(&root).unwrap();
+        assert_eq!(result["repository"], true);
+        assert!(result["diff"].as_str().unwrap().contains("@@"));
+        assert!(result["diff"].as_str().unwrap().contains("-before"));
+        assert!(result["diff"].as_str().unwrap().contains("+after"));
+        assert_eq!(result["untracked"][0], "new.txt");
+    }
 }
 
 /// Hand a path or URL to the system default opener (host capability only).

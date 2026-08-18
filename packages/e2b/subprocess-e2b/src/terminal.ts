@@ -279,6 +279,10 @@ export class E2BTerminalHandle implements SubprocessTerminalHandle {
   readonly pid: number
   readonly done: Promise<SubprocessOutcome>
 
+  // The remote E2B PTY has no viewport-control channel; resize stays a
+  // best-effort no-op per the seam contract.
+  resize(_columns: number, _rows: number): void {}
+
   private topLevelExited = false
   private cleanup: Promise<void> | undefined
   private readonly operationController = new AbortController()

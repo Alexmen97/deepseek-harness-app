@@ -156,6 +156,8 @@ export interface TerminalBackendSession {
   read(request: TerminalReadRequest): TerminalReadResult
   /** Signal the verified foreground process group. */
   signal(signal: TerminalSignal): Promise<TerminalSignalResult>
+  /** Resize the backend viewport in character cells. */
+  resize?(columns: number, rows: number): void
   /** Observe top-level process status. */
   status(): TerminalSessionStatus
   /** Idempotently close the captured owned process tree and await quiescence. */

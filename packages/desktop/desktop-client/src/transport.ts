@@ -57,6 +57,16 @@ export interface DesktopHost {
   credentialSet(ref: string, value: string): Promise<void>
   /** Delete one credential from the macOS Keychain. */
   credentialDelete(ref: string): Promise<void>
+  /** List one directory level under the workspace (M4 file explorer). */
+  fsList(path: string): Promise<DesktopFsEntry[]>
+  /** Read one workspace file as a size-capped UTF-8 preview. */
+  fsReadText(path: string): Promise<string>
+  /** Reveal one workspace file or directory in Finder. */
+  revealInPath(path: string): Promise<void>
+  /** Structured read-only git status for the workspace. */
+  gitStatus(): Promise<DesktopGitStatus>
+  /** Read-only unified diff plus untracked paths for the workspace. */
+  gitDiff(): Promise<DesktopGitDiff>
   /** Reveal the runtime log files in the system viewer. */
   openLogs(): Promise<void>
   /** Open an external URL in the system browser. */
@@ -81,6 +91,31 @@ export interface DesktopHost {
   pickAttachments(): Promise<Array<{ name: string; mediaType: string; data: string }>>
   /** The manager's current lifecycle snapshot (boot anchor after missed events). */
   runtimeStatus(): Promise<DesktopRuntimeLifecycle>
+}
+
+/** One directory entry from the M4 file explorer. */
+export interface DesktopFsEntry {
+  name: string
+  path: string
+  isDir: boolean
+}
+
+/** Structured read-only git status result. */
+export interface DesktopGitStatus {
+  repository: boolean
+  reason?: 'git-not-found' | 'no-repository'
+  branch?: string
+  dirty?: boolean
+  changedFiles?: number
+  files?: Array<{ path: string; status: string }>
+}
+
+/** Read-only git diff result. */
+export interface DesktopGitDiff {
+  repository: boolean
+  reason?: 'git-not-found' | 'no-repository'
+  diff?: string
+  untracked?: string[]
 }
 
 /** The installed production/test bindings; apps/desktop installs the Tauri bindings before boot. */
