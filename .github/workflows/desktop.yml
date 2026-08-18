@@ -31,10 +31,10 @@ jobs:
           cache: pnpm
       - uses: dtolnay/rust-toolchain@stable
       - run: pnpm install --frozen-lockfile
-      - name: Typecheck
-        # The canonical script builds the host lib first: package exports such
-        # as */remote resolve to generated typert artifacts under lib/.
-        run: pnpm run typecheck
+      - name: Build and typecheck
+        # The desktop runtime tests below boot plugins from lib/ bundles, so
+        # both tsdown faces must run; the build also typechecks both programs.
+        run: pnpm run build
       - name: Lint
         run: pnpm exec oxlint -c .oxlintrc.json packages/desktop packages/credentials/credentials-keychain packages/api/gateway/src/client apps/desktop/src apps/desktop/tests
       - name: Desktop test suites
