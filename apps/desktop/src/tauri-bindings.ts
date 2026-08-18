@@ -91,6 +91,10 @@ export function installTauriBindings(): void {
         sendNotification({ title, body })
       },
       pickAttachments: async () => invoke('pick_attachments'),
+      runtimeStatus: async () => {
+        const status = await invoke<{ state: string; generation: number }>('runtime_status')
+        return { state: status.state as DesktopRuntimeLifecycle['state'], generation: status.generation }
+      },
       subscribeFocus: (listener) => {
         const promises = [
           listen('tauri://focus', () => { listener(true) }),

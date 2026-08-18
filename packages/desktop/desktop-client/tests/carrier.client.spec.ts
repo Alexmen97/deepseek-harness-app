@@ -38,6 +38,7 @@ function fakeTransport() {
         notify: async () => {},
         subscribeFocus: () => () => {},
         pickAttachments: async () => [],
+        runtimeStatus: async () => ({ state: 'stopped', generation: 0 }),
       },
     } satisfies DesktopBindings,
   }

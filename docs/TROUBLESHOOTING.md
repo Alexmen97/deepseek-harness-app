@@ -1,5 +1,9 @@
 # Troubleshooting
 
+## Gatekeeper on first launch
+
+Public releases are Developer ID signed, notarized, and stapled: Gatekeeper accepts them after the normal confirmation. Do not disable Gatekeeper. An unsigned development build you compiled yourself may be blocked with a quarantine prompt; that affects only local development artifacts and is expected.
+
 ## The runtime fails to start
 
 Open Settings → Advanced → Copy Diagnostics and check the runtime state and generation. Restart Harness from the same section; Open Logs shows the desktop log store.

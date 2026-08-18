@@ -50,7 +50,20 @@ export function DesktopOverlay(): ReactElement {
     return () => { active = false }
   }, [host])
 
-  useEffect(() => transport.subscribeState((next) => { setLifecycle(next) }), [transport])
+  useEffect(() => {
+    const latest = { generation: 0 }
+    const unsubscribe = transport.subscribeState((next) => {
+      latest.generation = Math.max(latest.generation, next.generation)
+      setLifecycle(next)
+    })
+    // Boot anchor: the manager may have emitted Running before this
+    // WebView subscribed; adopt the manager's current snapshot so the
+    // status never sits on a stale Stopped after a successful boot.
+    void host.runtimeStatus().then((next) => {
+      if (next.generation >= latest.generation) setLifecycle(next)
+    }, () => {})
+    return unsubscribe
+  }, [transport, host])
 
   useEffect(() => {
     const openSettings = (): void => { setSettingsOpen(true) }

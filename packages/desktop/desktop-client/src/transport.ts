@@ -79,6 +79,8 @@ export interface DesktopHost {
   subscribeFocus(listener: (focused: boolean) => void): () => void
   /** One user-selected image returned by the native attachment picker. */
   pickAttachments(): Promise<Array<{ name: string; mediaType: string; data: string }>>
+  /** The manager's current lifecycle snapshot (boot anchor after missed events). */
+  runtimeStatus(): Promise<DesktopRuntimeLifecycle>
 }
 
 /** The installed production/test bindings; apps/desktop installs the Tauri bindings before boot. */

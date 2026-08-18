@@ -152,6 +152,7 @@ export function spawnNodeRuntime(fixture: string): NodeRuntimeHarness {
     notify: async () => {},
     subscribeFocus: () => () => {},
     pickAttachments: async () => [],
+    runtimeStatus: async () => ({ state: 'stopped', generation: 0 }),
   }
   installDesktopBindings({ transport, host })
   return {

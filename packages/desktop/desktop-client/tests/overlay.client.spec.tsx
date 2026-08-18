@@ -39,6 +39,7 @@ function fakeBindings(options: { workspace?: string; configured?: boolean } = {}
     notify: vi.fn(async () => {}),
     subscribeFocus: vi.fn(() => () => {}),
     pickAttachments: vi.fn(async () => []),
+    runtimeStatus: vi.fn(async () => ({ state: 'stopped' as const, generation: 0 })),
   }
   const bindings: DesktopBindings = {
     host,

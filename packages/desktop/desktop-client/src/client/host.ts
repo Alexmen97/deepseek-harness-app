@@ -42,6 +42,8 @@ export interface DesktopHostService {
   diagnostics(): Promise<Record<string, string>>
   /** Rebuild the native menu with the resolved desktop language (one of seven). */
   setMenuLanguage(language: string): Promise<void>
+  /** The manager's current lifecycle snapshot (boot anchor after missed events). */
+  runtimeStatus(): Promise<DesktopRuntimeLifecycle>
   /** Create a session in the current workspace (native New Session action). */
   newSession(): Promise<void>
 }
@@ -135,6 +137,7 @@ export function apply(ctx: Context): void {
     stopRuntime: () => host.stopRuntime(),
     diagnostics: () => host.diagnostics(),
     setMenuLanguage: language => host.setMenuLanguage(language),
+    runtimeStatus: () => host.runtimeStatus(),
     newSession: async () => {
       const connection = ctx.get('connection') as {
         api: {
