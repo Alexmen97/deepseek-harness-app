@@ -48,11 +48,14 @@ jobs:
         run: |
           # tauri-build validates declared bundle resources even for unit tests;
           # the real SEA is staged only by the tauri build's beforeBuildCommand,
-          # so a placeholder satisfies the dev-profile resource check here.
+          # so stage the tracked runtime config and a sidecar placeholder to
+          # satisfy the dev-profile resource checks here.
           mkdir -p resources/sidecar
+          mkdir -p resources/runtime
           if [ ! -e resources/sidecar/dsh-desktop-runtime ]; then
             touch resources/sidecar/dsh-desktop-runtime
           fi
+          cp ../../../packages/desktop/desktop-runtime/runtime/cordis.yml resources/runtime/cordis.yml
           cargo test --lib
       - name: Frontend build
         working-directory: apps/desktop
