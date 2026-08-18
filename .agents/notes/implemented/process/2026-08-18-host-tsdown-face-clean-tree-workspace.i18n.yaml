@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/process/2026-08-18-host-tsdown-face-clean-tree-workspace.md
+2026-08-18-host-tsdown-face-clean-tree-workspace.md: e4318d9e94ee11d5a7d3c98a597718047357626f
+2026-08-18-host-tsdown-face-clean-tree-workspace.zh.md: 0728fd9b2f656e8acf1121c59be1a8f6e735f6d4

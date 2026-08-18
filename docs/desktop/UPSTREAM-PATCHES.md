@@ -12,4 +12,10 @@ Effect if upstream exports it later: the re-export line becomes a duplicate expo
 
 Patch: namespace method batches install inside the namespace service's own apply instead of after it, so a consumer that injects a remote namespace always sees the mounted methods (the M1B syncInspectManifest race). The rollback path withdraws partially-installed methods on a failed batch. Regression test: gateway.client.spec.ts, 'installs a namespace batch before the namespace service becomes visible'. Upstream PR candidate: the same ordering fix in ClientRemoteService.
 
+## tsdown.config.ts
+
+Patch: the Host build face filters its workspace to the packages whose lib/types the Host TypeScript pass emitted, instead of building every workspace package. On a clean tree the previous workspace list included client-only packages (for example the desktop client) whose lib/types only the Client aggregate emits, and the Host entry resolution failed. The Client face keeps the full workspace list unchanged.
+
+Effect if upstream adopts it: identical filter; the desktop-specific reason (client-only desktop packages joined the Client aggregate) disappears but the clean-tree failure affects any client-only package, so the filter remains correct. Upstream PR candidate: the same exists-based Host workspace filter.
+
 No other upstream file is modified.
