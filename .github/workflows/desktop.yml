@@ -3,20 +3,9 @@ name: Desktop
 on:
   push:
     branches: [main]
+  # No path filter: the checks job is a required check on main, and a
+  # path-filtered workflow would leave pull requests without a verdict.
   pull_request:
-    paths:
-      - apps/desktop/**
-      - apps/desktop-agent-pkg/**
-      - packages/desktop/**
-      - packages/credentials/credentials-keychain/**
-      - packages/api/gateway/**
-      - scripts/build-exe-for-desktop.ts
-      - scripts/desktop-icon.mjs
-      - scripts/ensure-desktop-sidecar.mjs
-      - scripts/sign-desktop.mjs
-      - scripts/verify-desktop-release.mjs
-      - scripts/make-desktop-dmg.mjs
-      - .github/workflows/desktop.yml
   workflow_dispatch:
 
 jobs:
