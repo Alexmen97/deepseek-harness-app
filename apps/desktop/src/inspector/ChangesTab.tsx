@@ -1,10 +1,11 @@
 /** M4 working-tree changes and git status over the narrow host git capability. */
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import type { ReactElement } from 'react'
 import { desktopBindings, type DesktopGitDiff, type DesktopGitStatus } from '@deepseek-ai/dsh-desktop-client'
 import { useDesktopStrings, desktopPalette, useDesktopAppearance } from '@deepseek-ai/dsh-desktop-client/src/ui/strings'
 import { parseDiff, statusCategory } from './diff.ts'
+import { onFilesInvalidated } from './filesync.ts'
 
 export function ChangesTab(): ReactElement {
   const { t } = useDesktopStrings()
@@ -13,11 +14,17 @@ export function ChangesTab(): ReactElement {
   const [status, setStatus] = useState<DesktopGitStatus | undefined>(undefined)
   const [diff, setDiff] = useState<DesktopGitDiff | undefined>(undefined)
 
-  const refresh = (): void => {
+  const refresh = useCallback((): void => {
     void host.gitStatus().then(setStatus).catch(() => { setStatus(undefined) })
     void host.gitDiff().then(setDiff).catch(() => { setDiff(undefined) })
-  }
-  useEffect(refresh, [host])
+  }, [host])
+  useEffect(refresh, [refresh])
+
+  // M5B live refresh: watcher invalidations re-run git status and the diff
+  // in one debounced pass; git never runs per filesystem event.
+  useEffect(() => {
+    return onFilesInvalidated(() => { refresh() })
+  }, [refresh])
 
   const parsed = diff?.diff !== undefined ? parseDiff(diff.diff) : undefined
   let headerContent: ReactElement

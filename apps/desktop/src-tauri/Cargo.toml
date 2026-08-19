@@ -21,6 +21,7 @@ keyring = { version = "3", features = ["apple-native"] }
 rfd = "0.15"
 os_info = "3"
 base64 = "0.22"
+notify = "8"
 
 [profile.release]
 codegen-units = 1

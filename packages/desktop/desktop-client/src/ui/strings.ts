@@ -135,6 +135,25 @@ export type DesktopStringKey =
   | 'editor.unsavedDiscard'
   | 'editor.unsavedSave'
   | 'editor.readOnly'
+  | 'editor.externalState'
+  | 'editor.externalBody'
+  | 'editor.externalReload'
+  | 'editor.externalKeep'
+  | 'editor.deletedState'
+  | 'editor.deletedBody'
+  | 'editor.deletedClose'
+  | 'editor.saveAll'
+  | 'quickOpen.placeholder'
+  | 'quickOpen.indexing'
+  | 'quickOpen.empty'
+  | 'quickOpen.noMatch'
+  | 'quickOpen.hint'
+  | 'quitGuard.title'
+  | 'quitGuard.body'
+  | 'quitGuard.cancel'
+  | 'quitGuard.discard'
+  | 'quitGuard.saveAll'
+  | 'quitGuard.saveFailed'
   | 'editor.large'
 
 /** English canonical desktop dictionary. */
@@ -263,6 +282,25 @@ export const en: Record<DesktopStringKey, string> = {
   'editor.unsavedSave': 'Save',
   'editor.readOnly': 'Read only',
   'editor.large': 'File too large to edit',
+  'editor.externalState': 'Changed externally',
+  'editor.externalBody': 'This file changed on disk. Your edits are kept in memory.',
+  'editor.externalReload': 'Review / Reload',
+  'editor.externalKeep': 'Keep my changes',
+  'editor.deletedState': 'Deleted',
+  'editor.deletedBody': 'This file was deleted on disk. The tab keeps its content; nothing is recreated automatically.',
+  'editor.deletedClose': 'Close tab',
+  'editor.saveAll': 'Save All',
+  'quickOpen.placeholder': 'Search files…',
+  'quickOpen.indexing': 'Indexing workspace…',
+  'quickOpen.empty': 'No files in this workspace',
+  'quickOpen.noMatch': 'No matching files',
+  'quickOpen.hint': '↑ ↓ navigate · Enter open · Esc close',
+  'quitGuard.title': 'Unsaved changes',
+  'quitGuard.body': 'Some files have unsaved changes. Quit now?',
+  'quitGuard.cancel': 'Cancel',
+  'quitGuard.discard': 'Discard and Quit',
+  'quitGuard.saveAll': 'Save All and Quit',
+  'quitGuard.saveFailed': 'Some files could not be saved (stale version). Nothing was discarded.',
 }
 
 /** Italian dictionary, complete against the English key set. */
@@ -391,6 +429,25 @@ export const it: Record<DesktopStringKey, string> = {
   'editor.unsavedSave': 'Salva',
   'editor.readOnly': 'Sola lettura',
   'editor.large': 'File troppo grande per la modifica',
+  'editor.externalState': 'Modificato esternamente',
+  'editor.externalBody': 'Questo file è cambiato su disco. Le tue modifiche restano in memoria.',
+  'editor.externalReload': 'Rivedi / Ricarica',
+  'editor.externalKeep': 'Mantieni le mie modifiche',
+  'editor.deletedState': 'Eliminato',
+  'editor.deletedBody': 'Questo file è stato eliminato su disco. La scheda conserva il contenuto; nulla viene ricreato automaticamente.',
+  'editor.deletedClose': 'Chiudi scheda',
+  'editor.saveAll': 'Salva tutto',
+  'quickOpen.placeholder': 'Cerca file…',
+  'quickOpen.indexing': 'Indicizzazione workspace…',
+  'quickOpen.empty': 'Nessun file in questo workspace',
+  'quickOpen.noMatch': 'Nessun file corrispondente',
+  'quickOpen.hint': '↑ ↓ naviga · Invio apre · Esc chiude',
+  'quitGuard.title': 'Modifiche non salvate',
+  'quitGuard.body': 'Alcuni file hanno modifiche non salvate. Uscire ora?',
+  'quitGuard.cancel': 'Annulla',
+  'quitGuard.discard': 'Scarta ed esci',
+  'quitGuard.saveAll': 'Salva tutto ed esci',
+  'quitGuard.saveFailed': 'Alcuni file non sono stati salvati (versione non aggiornata). Nulla è stato scartato.',
 }
 
 /** Chinese dictionary, complete against the English key set. */
@@ -519,6 +576,25 @@ export const zh: Record<DesktopStringKey, string> = {
   'editor.unsavedSave': '保存',
   'editor.readOnly': '只读',
   'editor.large': '文件太大，无法编辑',
+  'editor.externalState': '外部已修改',
+  'editor.externalBody': '此文件已在磁盘上更改。你的编辑仍保留在内存中。',
+  'editor.externalReload': '查看 / 重新加载',
+  'editor.externalKeep': '保留我的更改',
+  'editor.deletedState': '已删除',
+  'editor.deletedBody': '此文件已在磁盘上删除。标签页保留内容；不会自动重新创建。',
+  'editor.deletedClose': '关闭标签页',
+  'editor.saveAll': '全部保存',
+  'quickOpen.placeholder': '搜索文件…',
+  'quickOpen.indexing': '正在索引工作区…',
+  'quickOpen.empty': '此工作区没有文件',
+  'quickOpen.noMatch': '没有匹配的文件',
+  'quickOpen.hint': '↑ ↓ 导航 · 回车打开 · Esc 关闭',
+  'quitGuard.title': '未保存的更改',
+  'quitGuard.body': '部分文件有未保存的更改。现在退出？',
+  'quitGuard.cancel': '取消',
+  'quitGuard.discard': '放弃并退出',
+  'quitGuard.saveAll': '全部保存并退出',
+  'quitGuard.saveFailed': '部分文件无法保存（版本已过期）。未丢弃任何内容。',
 }
 /** Spanish dictionary, complete against the English key set. */
 export const es: Record<DesktopStringKey, string> = {
@@ -646,6 +722,25 @@ export const es: Record<DesktopStringKey, string> = {
   'editor.unsavedSave': 'Guardar',
   'editor.readOnly': 'Solo lectura',
   'editor.large': 'Archivo demasiado grande para editar',
+  'editor.externalState': 'Cambiado externamente',
+  'editor.externalBody': 'Este archivo cambió en el disco. Tus ediciones se conservan en memoria.',
+  'editor.externalReload': 'Revisar / Recargar',
+  'editor.externalKeep': 'Conservar mis cambios',
+  'editor.deletedState': 'Eliminado',
+  'editor.deletedBody': 'Este archivo fue eliminado del disco. La pestaña conserva el contenido; no se recrea nada automáticamente.',
+  'editor.deletedClose': 'Cerrar pestaña',
+  'editor.saveAll': 'Guardar todo',
+  'quickOpen.placeholder': 'Buscar archivos…',
+  'quickOpen.indexing': 'Indexando el workspace…',
+  'quickOpen.empty': 'No hay archivos en este workspace',
+  'quickOpen.noMatch': 'No hay archivos que coincidan',
+  'quickOpen.hint': '↑ ↓ navegar · Enter abre · Esc cierra',
+  'quitGuard.title': 'Cambios sin guardar',
+  'quitGuard.body': 'Algunos archivos tienen cambios sin guardar. ¿Salir ahora?',
+  'quitGuard.cancel': 'Cancelar',
+  'quitGuard.discard': 'Descartar y salir',
+  'quitGuard.saveAll': 'Guardar todo y salir',
+  'quitGuard.saveFailed': 'No se pudieron guardar algunos archivos (versión obsoleta). No se descartó nada.',
 }
 /** French dictionary, complete against the English key set. */
 export const fr: Record<DesktopStringKey, string> = {
@@ -773,6 +868,25 @@ export const fr: Record<DesktopStringKey, string> = {
   'editor.unsavedSave': 'Enregistrer',
   'editor.readOnly': 'Lecture seule',
   'editor.large': 'Fichier trop volumineux pour la modification',
+  'editor.externalState': 'Modifié en externe',
+  'editor.externalBody': 'Ce fichier a changé sur le disque. Vos modifications restent en mémoire.',
+  'editor.externalReload': 'Réviser / Recharger',
+  'editor.externalKeep': 'Conserver mes modifications',
+  'editor.deletedState': 'Supprimé',
+  'editor.deletedBody': 'Ce fichier a été supprimé du disque. L’onglet conserve son contenu ; rien n’est recréé automatiquement.',
+  'editor.deletedClose': 'Fermer l’onglet',
+  'editor.saveAll': 'Tout enregistrer',
+  'quickOpen.placeholder': 'Rechercher des fichiers…',
+  'quickOpen.indexing': 'Indexation du workspace…',
+  'quickOpen.empty': 'Aucun fichier dans ce workspace',
+  'quickOpen.noMatch': 'Aucun fichier correspondant',
+  'quickOpen.hint': '↑ ↓ naviguer · Entrée ouvre · Échap ferme',
+  'quitGuard.title': 'Modifications non enregistrées',
+  'quitGuard.body': 'Certains fichiers ont des modifications non enregistrées. Quitter maintenant ?',
+  'quitGuard.cancel': 'Annuler',
+  'quitGuard.discard': 'Ignorer et quitter',
+  'quitGuard.saveAll': 'Tout enregistrer et quitter',
+  'quitGuard.saveFailed': 'Certains fichiers n’ont pas pu être enregistrés (version obsolète). Rien n’a été ignoré.',
 }
 /** German dictionary, complete against the English key set. */
 export const de: Record<DesktopStringKey, string> = {
@@ -900,6 +1014,25 @@ export const de: Record<DesktopStringKey, string> = {
   'editor.unsavedSave': 'Speichern',
   'editor.readOnly': 'Schreibgeschützt',
   'editor.large': 'Datei zu groß zum Bearbeiten',
+  'editor.externalState': 'Extern geändert',
+  'editor.externalBody': 'Diese Datei wurde auf der Festplatte geändert. Ihre Bearbeitungen bleiben im Speicher.',
+  'editor.externalReload': 'Prüfen / Neu laden',
+  'editor.externalKeep': 'Meine Änderungen behalten',
+  'editor.deletedState': 'Gelöscht',
+  'editor.deletedBody': 'Diese Datei wurde auf der Festplatte gelöscht. Der Tab behält den Inhalt; nichts wird automatisch neu erstellt.',
+  'editor.deletedClose': 'Tab schließen',
+  'editor.saveAll': 'Alle speichern',
+  'quickOpen.placeholder': 'Dateien suchen…',
+  'quickOpen.indexing': 'Workspace wird indexiert…',
+  'quickOpen.empty': 'Keine Dateien in diesem Workspace',
+  'quickOpen.noMatch': 'Keine passenden Dateien',
+  'quickOpen.hint': '↑ ↓ navigieren · Enter öffnet · Esc schließt',
+  'quitGuard.title': 'Nicht gespeicherte Änderungen',
+  'quitGuard.body': 'Einige Dateien haben ungespeicherte Änderungen. Jetzt beenden?',
+  'quitGuard.cancel': 'Abbrechen',
+  'quitGuard.discard': 'Verwerfen und beenden',
+  'quitGuard.saveAll': 'Alle speichern und beenden',
+  'quitGuard.saveFailed': 'Einige Dateien konnten nicht gespeichert werden (veraltete Version). Nichts wurde verworfen.',
 }
 /** Brazilian Portuguese dictionary, complete against the English key set. */
 export const ptBr: Record<DesktopStringKey, string> = {
@@ -1027,6 +1160,25 @@ export const ptBr: Record<DesktopStringKey, string> = {
   'editor.unsavedSave': 'Salvar',
   'editor.readOnly': 'Somente leitura',
   'editor.large': 'Arquivo grande demais para editar',
+  'editor.externalState': 'Alterado externamente',
+  'editor.externalBody': 'Este arquivo mudou no disco. Suas edições permanecem na memória.',
+  'editor.externalReload': 'Revisar / Recarregar',
+  'editor.externalKeep': 'Manter minhas alterações',
+  'editor.deletedState': 'Excluído',
+  'editor.deletedBody': 'Este arquivo foi excluído do disco. A aba mantém o conteúdo; nada é recriado automaticamente.',
+  'editor.deletedClose': 'Fechar aba',
+  'editor.saveAll': 'Salvar tudo',
+  'quickOpen.placeholder': 'Pesquisar arquivos…',
+  'quickOpen.indexing': 'Indexando o workspace…',
+  'quickOpen.empty': 'Nenhum arquivo neste workspace',
+  'quickOpen.noMatch': 'Nenhum arquivo correspondente',
+  'quickOpen.hint': '↑ ↓ navegar · Enter abre · Esc fecha',
+  'quitGuard.title': 'Alterações não salvas',
+  'quitGuard.body': 'Alguns arquivos têm alterações não salvas. Sair agora?',
+  'quitGuard.cancel': 'Cancelar',
+  'quitGuard.discard': 'Descartar e sair',
+  'quitGuard.saveAll': 'Salvar tudo e sair',
+  'quitGuard.saveFailed': 'Não foi possível salvar alguns arquivos (versão desatualizada). Nada foi descartado.',
 }
 
 /**

@@ -9,6 +9,7 @@ import { ChangesTab } from './ChangesTab.tsx'
 import { TerminalTab } from './TerminalTab.tsx'
 import { JobsTab, PlanTab, SubagentsTab } from './StateTabs.tsx'
 import { EditorSurface } from './EditorSurface.tsx'
+import { QuickOpen } from './QuickOpen.tsx'
 
 export type InspectorTab = 'files' | 'changes' | 'terminal' | 'plan' | 'jobs' | 'subagents'
 
@@ -62,6 +63,7 @@ export function Inspector(): ReactElement {
   return (
     <>
       <EditorSurface />
+      <QuickOpen />
       <div style={{
         position: 'fixed',
         right: 0,

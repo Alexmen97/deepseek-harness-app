@@ -114,6 +114,31 @@ export function installTauriBindings(): void {
           })
         }
       },
+      subscribeWorkspaceChanged: (listener) => {
+        const promise = listen<{ generation: number; paths: string[] }>('workspace://changed', (event) => {
+          listener({ generation: event.payload.generation, paths: event.payload.paths })
+        })
+        let disposed = false
+        return () => {
+          if (disposed) return
+          disposed = true
+          void promise.then((unlisten) => { unlisten() })
+        }
+      },
+      quitGuardArm: async (armed) => { await invoke('quit_guard_arm', { armed }) },
+      subscribeQuitGuard: (listener) => {
+        const promise = listen<{ generation: number }>('desktop://quit-guard', (event) => {
+          listener(event.payload.generation)
+        })
+        let disposed = false
+        return () => {
+          if (disposed) return
+          disposed = true
+          void promise.then((unlisten) => { unlisten() })
+        }
+      },
+      quitNow: async () => { await invoke('quit_now') },
+      workspaceFiles: async () => await invoke<string[]>('workspace_files'),
     },
   }
   installDesktopBindings(bindings)

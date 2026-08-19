@@ -19,6 +19,16 @@ export interface DesktopRuntimeFrame {
   payload: unknown
 }
 
+/** One coalesced workspace invalidation batch from the native watcher. */
+export interface DesktopWorkspaceChanged {
+  /** The runtime generation the batch belongs to; stale generations drop. */
+  generation: number
+  /** Workspace-relative paths that *may* have changed (path-only, not authoritative). */
+  paths: string[]
+  /** True when the flood cap truncated the batch; treat every surface as stale. */
+  full?: boolean
+}
+
 /** One unary request over the typed desktop wire. */
 export interface DesktopTransportRequest {
   /** apiproxy method key, or 'respond'. */
@@ -91,6 +101,16 @@ export interface DesktopHost {
   pickAttachments(): Promise<Array<{ name: string; mediaType: string; data: string }>>
   /** The manager's current lifecycle snapshot (boot anchor after missed events). */
   runtimeStatus(): Promise<DesktopRuntimeLifecycle>
+  /** Subscribe to native workspace invalidation batches; the disposer unsubscribes. */
+  subscribeWorkspaceChanged(listener: (event: DesktopWorkspaceChanged) => void): () => void
+  /** Arm or disarm the unsaved-changes quit guard (frontend keeps it in sync). */
+  quitGuardArm(armed: boolean): Promise<void>
+  /** Subscribe to quit-guard pause requests; the disposer unsubscribes. */
+  subscribeQuitGuard(listener: (generation: number) => void): () => void
+  /** Final quit after the frontend resolved unsaved changes. */
+  quitNow(): Promise<void>
+  /** Workspace file index for Quick Open (git-aware, honors .gitignore). */
+  workspaceFiles(): Promise<string[]>
 }
 
 /** One directory entry from the M4 file explorer. */

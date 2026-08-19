@@ -5,6 +5,7 @@ mod commands;
 mod manager;
 mod menu;
 mod navigation;
+mod workspace_watcher;
 
 pub fn run() {
     tauri::Builder::default()
@@ -76,14 +77,30 @@ pub fn run() {
             commands::menu_set_language,
             commands::about_info,
             commands::log_line,
+            commands::quit_guard_arm,
+            commands::quit_now,
+            commands::workspace_files,
         ])
         .build(tauri::generate_context!())
         .expect("error while building the desktop application")
         .run(|app, event| {
-            if let tauri::RunEvent::Exit = event {
-                if let Some(manager) = app.try_state::<RuntimeManager>() {
-                    let _ = manager.stop();
+            match event {
+                tauri::RunEvent::ExitRequested { api, .. } => {
+                    if let Some(manager) = app.try_state::<RuntimeManager>() {
+                        if manager.quit_guard_armed() {
+                            // Unsaved editor buffers: pause before any runtime
+                            // teardown and let the frontend resolve the decision.
+                            api.prevent_exit();
+                            manager.emit_quit_guard_request();
+                        }
+                    }
                 }
+                tauri::RunEvent::Exit => {
+                    if let Some(manager) = app.try_state::<RuntimeManager>() {
+                        let _ = manager.stop();
+                    }
+                }
+                _ => {}
             }
         });
 }

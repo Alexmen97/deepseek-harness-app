@@ -44,6 +44,11 @@ function fakeTransport() {
         subscribeFocus: () => () => {},
         pickAttachments: async () => [],
         runtimeStatus: async () => ({ state: 'stopped', generation: 0 }),
+        subscribeWorkspaceChanged: () => () => {},
+        quitGuardArm: async () => {},
+        subscribeQuitGuard: () => () => {},
+        quitNow: async () => {},
+        workspaceFiles: async () => [],
       },
     } satisfies DesktopBindings,
   }

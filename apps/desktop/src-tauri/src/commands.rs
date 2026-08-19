@@ -523,6 +523,106 @@ fn git_diff_at(root: &Path) -> Result<Value, String> {
     Ok(json!({ "repository": true, "diff": diff_text, "untracked": untracked }))
 }
 
+/// Arm or disarm the unsaved-changes quit guard (frontend keeps it in sync
+/// with dirty editor buffers).
+#[tauri::command]
+pub fn quit_guard_arm(manager: State<'_, RuntimeManager>, armed: bool) -> Result<(), String> {
+    manager.set_quit_guard(armed);
+    Ok(())
+}
+
+/// Final quit after the frontend resolved unsaved changes; the normal
+/// RunEvent::Exit path then stops the runtime (no orphan).
+#[tauri::command]
+pub fn quit_now(manager: State<'_, RuntimeManager>) -> Result<(), String> {
+    manager.request_quit();
+    Ok(())
+}
+
+/// Cap for the non-git Quick Open index walk; larger trees fail loudly.
+const MAX_INDEX_FILES: usize = 200_000;
+
+/// Workspace file index for Quick Open. Inside a git repository the listing
+/// is 'git ls-files --cached --others --exclude-standard' (NUL-separated,
+/// honors .gitignore, fixed argv, no shell); outside git it is a bounded
+/// directory walk that skips .git/.DS_Store and does not descend into
+/// symlinked directories. Runs on the blocking pool so a huge tree never
+/// stalls the IPC thread; the frontend discards stale results.
+#[tauri::command]
+pub async fn workspace_files(app: tauri::AppHandle) -> Result<Vec<String>, String> {
+    let root = workspace_root(&app)?;
+    tauri::async_runtime::spawn_blocking(move || workspace_files_at(&root))
+        .await
+        .map_err(|error| format!("workspace index task failed: {error}"))?
+}
+
+/// Workspace index body over an explicit root for tests.
+fn workspace_files_at(root: &Path) -> Result<Vec<String>, String> {
+    let inside = Command::new("git")
+        .args(["-C", root.to_string_lossy().as_ref(), "rev-parse", "--is-inside-work-tree"])
+        .output();
+    let mut files = match inside {
+        Err(_) => Vec::new(),
+        Ok(output) if output.status.success() => {
+            let listed = Command::new("git")
+                .args(["-C", root.to_string_lossy().as_ref(), "ls-files", "-z", "--cached", "--others", "--exclude-standard"])
+                .output()
+                .map_err(|error| format!("git ls-files failed: {error}"))?;
+            if !listed.status.success() {
+                return Err("git ls-files failed".into());
+            }
+            let mut listed_files = Vec::new();
+            for part in listed.stdout.split(|byte| *byte == 0) {
+                if part.is_empty() {
+                    continue;
+                }
+                listed_files.push(String::from_utf8_lossy(part).into_owned());
+            }
+            listed_files
+        }
+        Ok(_) => Vec::new(),
+    };
+    if !files.is_empty() {
+        files.sort();
+        return Ok(files);
+    }
+    walk_index(root, root, &mut files)?;
+    files.sort();
+    Ok(files)
+}
+
+/// Bounded recursive walk collecting workspace-relative file paths.
+fn walk_index(root: &Path, dir: &Path, files: &mut Vec<String>) -> Result<(), String> {
+    for item in std::fs::read_dir(dir).map_err(|error| format!("cannot read directory: {error}"))? {
+        let item = item.map_err(|error| format!("cannot read entry: {error}"))?;
+        let name = item.file_name().to_string_lossy().into_owned();
+        if name == ".git" || name == ".DS_Store" {
+            continue;
+        }
+        let kind = item.file_type().map_err(|error| format!("cannot inspect entry: {error}"))?;
+        let rel = item
+            .path()
+            .strip_prefix(root)
+            .map(|path| path.to_string_lossy().into_owned())
+            .unwrap_or(name);
+        if kind.is_dir() && !kind.is_symlink() {
+            walk_index(root, &item.path(), files)?;
+            continue;
+        }
+        // Symlinked directories are indexed as entries but never descended
+        // into (a cycle or outside target must not leak into the index);
+        // symlinked files stay indexed.
+        if kind.is_symlink() && std::fs::metadata(item.path()).map(|meta| meta.is_dir()).unwrap_or(false) {
+            continue;
+        }
+        files.push(rel);
+        if files.len() > MAX_INDEX_FILES {
+            return Err(format!("workspace exceeds the {MAX_INDEX_FILES}-file index limit"));
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -634,6 +734,51 @@ mod tests {
         assert!(result["diff"].as_str().unwrap().contains("-before"));
         assert!(result["diff"].as_str().unwrap().contains("+after"));
         assert_eq!(result["untracked"][0], "new.txt");
+    }
+
+    #[test]
+    fn workspace_files_indexes_git_with_ignore_semantics() {
+        let root = fixture_root("index-git");
+        let git = |args: &[&str]| {
+            Command::new("git")
+                .current_dir(&root)
+                .args(args)
+                .output()
+                .expect("git available")
+        };
+        assert!(git(&["init", "-q", "-b", "main"]).status.success());
+        assert!(git(&["config", "user.email", "m5@example.test"]).status.success());
+        assert!(git(&["config", "user.name", "M5 Test"]).status.success());
+        fs::write(root.join(".gitignore"), "*.log").unwrap();
+        fs::write(root.join("tracked.txt"), "t").unwrap();
+        fs::write(root.join("ignored.log"), "i").unwrap();
+        assert!(git(&["add", ".gitignore", "tracked.txt"]).status.success());
+        assert!(git(&["commit", "-q", "-m", "initial"]).status.success());
+        fs::write(root.join("untracked.txt"), "u").unwrap();
+
+        let files = workspace_files_at(&root).unwrap();
+        assert!(files.contains(&"tracked.txt".into()));
+        assert!(files.contains(&".gitignore".into()));
+        assert!(files.contains(&"untracked.txt".into()));
+        assert!(!files.iter().any(|file| file == "ignored.log"));
+        assert!(!files.iter().any(|file| file.starts_with(".git/")));
+    }
+
+    #[test]
+    fn workspace_files_walks_outside_git_and_skips_noise_and_symlink_dirs() {
+        let root = fixture_root("index-walk");
+        fs::create_dir_all(root.join("src/deep")).unwrap();
+        fs::create_dir_all(root.join(".git/objects")).unwrap();
+        fs::create_dir_all(root.join("node_modules/pkg")).unwrap();
+        fs::write(root.join("src/a.ts"), "a").unwrap();
+        fs::write(root.join("src/deep/b.ts"), "b").unwrap();
+        fs::write(root.join(".git/objects/x"), "x").unwrap();
+        fs::write(root.join(".DS_Store"), "noise").unwrap();
+        fs::write(root.join("node_modules/pkg/index.js"), "m").unwrap();
+        std::os::unix::fs::symlink(root.join("src"), root.join("linkdir")).unwrap();
+
+        let files = workspace_files_at(&root).unwrap();
+        assert_eq!(files, vec!["node_modules/pkg/index.js", "src/a.ts", "src/deep/b.ts"]);
     }
 }
 

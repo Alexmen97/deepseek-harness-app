@@ -8,7 +8,11 @@ import { createRoot } from 'react-dom/client'
 import { Component, lazy, Suspense, type ErrorInfo, type ReactNode } from 'react'
 import { AppWebEntry } from '@deepseek-ai/dsh-client-web'
 import { DesktopOverlay } from '@deepseek-ai/dsh-desktop-client/src/ui/overlay'
+import { QuitGuardDialog } from './inspector/QuitGuardDialog.tsx'
 import { installTauriBindings, requestRuntimeStart } from './tauri-bindings'
+import { installFilesync } from './inspector/filesync'
+import { installQuickOpen } from './inspector/quick-open'
+import { installQuitGuard } from './inspector/quit-guard'
 import { DESKTOP_ENTRY_IDS, DESKTOP_STATICS } from './desktop-modules'
 import { assertNoJsExpr } from './boot-guard'
 
@@ -64,6 +68,9 @@ const overlay = document.getElementById(OVERLAY_ID)
 if (overlay === null) throw new Error('desktop entry: #desktop-overlay element missing')
 
 installTauriBindings()
+installFilesync()
+installQuickOpen()
+installQuitGuard()
 
 // The desktop boot manifest: one entry per statically bundled client plugin.
 // urls are synthetic keys the loadBundle seam maps back to the module table.
@@ -104,6 +111,7 @@ overlayRoot.render(
     <Suspense fallback={null}>
       <Inspector />
     </Suspense>
+    <QuitGuardDialog />
   </DesktopErrorBoundary>,
 )
 

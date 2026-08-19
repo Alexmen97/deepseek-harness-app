@@ -13,6 +13,8 @@
     "apps/desktop/src/inspector/diff.ts",
     "apps/desktop/src/inspector/store-core.ts",
     "apps/desktop/src/inspector/editor-core.ts",
+    "apps/desktop/src/inspector/filesync-core.ts",
+    "apps/desktop/src/inspector/quick-open-core.ts",
     "apps/web/tests/scaffold.ts",
     "apps/web/tests/default-model.e2e.ts",
     "apps/web/tests/declared-reasoning.e2e.ts",
@@ -109,7 +111,10 @@
     "packages/client/tsdown.client.ts",
     "scripts/client-bundle-css.spec.ts",
     "packages/typert/generator/tests/fixtures/**",
-    "scripts/client-bundle-purity.spec.ts"
+    "scripts/client-bundle-purity.spec.ts",
+    // Client-bound specs: they drive bindings and the editor store, which
+    // only typecheck under the desktop app build (apps/desktop/tsconfig.json).
+    "apps/desktop/tests/quit-guard.spec.ts"
   ],
   "references": [
     { "path": "./vendor/cosmokit" },

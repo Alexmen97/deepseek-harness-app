@@ -10,7 +10,9 @@ use std::time::{Duration, Instant};
 
 use serde_json::json;
 
-use super::{open_log, redact_secrets, route_frame, DesktopHost, LifecycleEvent, RuntimeFrame, RuntimeManager, RuntimeState, LOG_ROTATE_BYTES};
+use super::{
+    open_log, redact_secrets, route_frame, DesktopHost, LifecycleEvent, RuntimeFrame, RuntimeManager, RuntimeState, WorkspaceChanged, LOG_ROTATE_BYTES,
+};
 
 /// Serializes tests that mutate process-wide environment variables.
 static ENV_LOCK: Mutex<()> = Mutex::new(());
@@ -71,6 +73,18 @@ impl DesktopHost for FakeHost {
 
     fn auto_restart(&self) -> Result<(), String> {
         self.manager.get().map(|manager| manager.start()).unwrap_or(Err("manager unavailable".into()))
+    }
+
+    fn emit_workspace_changed(&self, event: &WorkspaceChanged) {
+        self.events.lock().unwrap().push(format!("workspace:{}:{}", event.generation, event.paths.join(",")));
+    }
+
+    fn emit_quit_guard(&self, generation: u64) {
+        self.events.lock().unwrap().push(format!("quit-guard:{generation}"));
+    }
+
+    fn exit_app(&self, code: i32) {
+        self.events.lock().unwrap().push(format!("exit:{code}"));
     }
 }
 
@@ -430,4 +444,61 @@ fn desktop_log_rotation_bounds_total_growth() {
     assert_eq!(std::fs::metadata(logs.join("desktop.log")).unwrap().len(), 4);
     // One retained file: the total bound stays below two rotations.
     assert!(!logs.join("desktop.log.2").exists());
+}
+#[test]
+fn quit_guard_arms_disarms_and_requests_exit() {
+    let dir = TestDir::new("quit-guard");
+    let (manager, host) = setup_manager(&dir, ECHO_SERVER, None, None);
+    assert!(!manager.quit_guard_armed());
+    manager.set_quit_guard(true);
+    assert!(manager.quit_guard_armed());
+    manager.emit_quit_guard_request();
+    assert!(host.has_event("quit-guard:0"));
+    manager.request_quit();
+    assert!(!manager.quit_guard_armed(), "request_quit must disarm before exiting");
+    assert!(host.has_event("exit:0"));
+}
+
+#[test]
+fn workspace_watcher_emits_generation_scoped_changes_and_stops_with_runtime() {
+    let _env = ENV_LOCK.lock().unwrap();
+    let dir = TestDir::new("watcher");
+    let ws = dir.path().join("ws");
+    std::fs::create_dir_all(&ws).unwrap();
+    let (manager, host) = setup_manager(&dir, ECHO_SERVER, None, Some(2000));
+    std::fs::write(dir.path().join("data/prefs.json"), format!(r#"{{"workspace":"{}"}}"#, ws.display())).unwrap();
+    manager.start().unwrap();
+    assert!(wait_until(Duration::from_secs(5), || manager.state() == RuntimeState::Running && manager.generation() == 1));
+    std::fs::write(ws.join("new.txt"), "one").unwrap();
+    assert!(
+        wait_until(Duration::from_secs(5), || host.has_event("workspace:1:new.txt")),
+        "the generation-1 watcher must report the created file"
+    );
+    manager.stop().unwrap();
+    let before = host.events().len();
+    std::fs::write(ws.join("after.txt"), "two").unwrap();
+    std::thread::sleep(Duration::from_millis(500));
+    assert_eq!(host.events().len(), before, "no watcher events after the runtime stops");
+}
+
+#[test]
+fn workspace_watcher_restarts_with_a_new_generation() {
+    let _env = ENV_LOCK.lock().unwrap();
+    let dir = TestDir::new("watcher-restart");
+    let ws = dir.path().join("ws");
+    std::fs::create_dir_all(&ws).unwrap();
+    let (manager, host) = setup_manager(&dir, ECHO_SERVER, None, Some(2000));
+    std::fs::write(dir.path().join("data/prefs.json"), format!(r#"{{"workspace":"{}"}}"#, ws.display())).unwrap();
+    manager.start().unwrap();
+    assert!(wait_until(Duration::from_secs(5), || manager.state() == RuntimeState::Running && manager.generation() == 1));
+    std::fs::write(ws.join("one.txt"), "one").unwrap();
+    assert!(wait_until(Duration::from_secs(5), || host.has_event("workspace:1:one.txt")));
+    manager.restart().unwrap();
+    assert!(wait_until(Duration::from_secs(5), || manager.state() == RuntimeState::Running && manager.generation() == 2));
+    std::fs::write(ws.join("two.txt"), "two").unwrap();
+    assert!(
+        wait_until(Duration::from_secs(5), || host.has_event("workspace:2:two.txt")),
+        "the generation-2 watcher must report the created file"
+    );
+    manager.stop().unwrap();
 }

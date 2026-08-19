@@ -1,11 +1,12 @@
 /** M4 file explorer and viewer over the narrow host fs capability. */
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactElement } from 'react'
 import { desktopBindings, type DesktopFsEntry } from '@deepseek-ai/dsh-desktop-client'
 import { useDesktopStrings, desktopPalette, useDesktopAppearance } from '@deepseek-ai/dsh-desktop-client/src/ui/strings'
 import { HighlightedLine } from './highlight.tsx'
 import { openFile } from './editorStore.ts'
+import { onFilesInvalidated } from './filesync.ts'
 
 export function FilesTab(): ReactElement {
   const { t } = useDesktopStrings()
@@ -17,6 +18,10 @@ export function FilesTab(): ReactElement {
   const [content, setContent] = useState<string>('')
   const [error, setError] = useState<string | undefined>(undefined)
   const [query, setQuery] = useState('')
+  const expandedRef = useRef(expanded)
+  expandedRef.current = expanded
+  const openPathRef = useRef(openPath)
+  openPathRef.current = openPath
 
   const load = useCallback(async (path: string): Promise<DesktopFsEntry[]> => {
     try {
@@ -29,6 +34,26 @@ export function FilesTab(): ReactElement {
   useEffect(() => {
     void load('').then(setEntries).catch(() => { setError(t('files.loadError')) })
   }, [load, t])
+
+  // M5B live refresh: a watcher invalidation re-lists the root, every
+  // expanded directory, and the open preview in one debounced pass.
+  useEffect(() => {
+    return onFilesInvalidated((_paths) => {
+      void load('').then(setEntries).catch(() => {})
+      for (const path of Object.keys(expandedRef.current)) {
+        void load(path).then((items) => {
+          setExpanded(current => (current[path] !== undefined ? { ...current, [path]: items } : current))
+        }).catch(() => {})
+      }
+      const preview = openPathRef.current
+      if (preview !== undefined) {
+        void host.fsReadText(preview).then((text) => {
+          setContent(text)
+          setError(undefined)
+        }).catch(() => {})
+      }
+    })
+  }, [load, host])
 
   const toggle = async (entry: DesktopFsEntry): Promise<void> => {
     if (!entry.isDir) {

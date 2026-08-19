@@ -11,15 +11,17 @@
 use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, Command, Stdio};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use serde::Serialize;
 use serde_json::{json, Value};
 use tauri::{AppHandle, Emitter, Manager};
+
+use crate::workspace_watcher::{WorkspaceChanged, WorkspaceWatcher};
 
 /// Default maximum stdout frame size in bytes (16 MiB).
 /// Rationale: tool results and terminal output ride single JSON frames and
@@ -90,6 +92,12 @@ pub trait DesktopHost: Clone + Send + Sync + 'static {
     fn data_dir(&self) -> Result<PathBuf, String>;
     /// Automatic restart attempted by the monitor after an unexpected exit.
     fn auto_restart(&self) -> Result<(), String>;
+    /// Forward one coalesced workspace invalidation batch to the frontend.
+    fn emit_workspace_changed(&self, event: &WorkspaceChanged);
+    /// Ask the frontend to resolve unsaved changes before the app exits.
+    fn emit_quit_guard(&self, generation: u64);
+    /// Exit the host application with a code after the quit decision.
+    fn exit_app(&self, code: i32);
 }
 
 impl DesktopHost for AppHandle {
@@ -114,6 +122,15 @@ impl DesktopHost for AppHandle {
         };
         state.inner().start()
     }
+    fn emit_workspace_changed(&self, event: &WorkspaceChanged) {
+        let _ = self.emit("workspace://changed", event);
+    }
+    fn emit_quit_guard(&self, generation: u64) {
+        let _ = self.emit("desktop://quit-guard", &json!({ "generation": generation }));
+    }
+    fn exit_app(&self, code: i32) {
+        self.exit(code);
+    }
 }
 
 pub struct RuntimeManager<H: DesktopHost = AppHandle> {
@@ -121,6 +138,9 @@ pub struct RuntimeManager<H: DesktopHost = AppHandle> {
     inner: Arc<Mutex<Inner>>,
     generation: Arc<AtomicU64>,
     pending: Arc<Mutex<HashMap<String, PendingRequest>>>,
+    /// Armed while the frontend holds dirty editor buffers; a quit attempt
+    /// pauses for the user decision instead of shutting down the runtime.
+    quit_guard: Arc<AtomicBool>,
 }
 
 struct Inner {
@@ -135,6 +155,9 @@ struct Inner {
     corrupt_reason: Option<String>,
     restart_times: Vec<Instant>,
     last_exit: Option<i32>,
+    /// The generation-scoped native workspace watcher, owned while the
+    /// runtime generation is alive and dropped on stop/restart.
+    watcher: Option<WorkspaceWatcher>,
 }
 
 impl<H: DesktopHost> RuntimeManager<H> {
@@ -149,9 +172,11 @@ impl<H: DesktopHost> RuntimeManager<H> {
                 corrupt_reason: None,
                 restart_times: Vec::new(),
                 last_exit: None,
+                watcher: None,
             })),
             generation: Arc::new(AtomicU64::new(0)),
             pending: Arc::new(Mutex::new(HashMap::new())),
+            quit_guard: Arc::new(AtomicBool::new(false)),
         }
     }
 
@@ -294,6 +319,7 @@ impl<H: DesktopHost> RuntimeManager<H> {
         std::thread::spawn(move || monitor_loop(monitor));
         self.set_inner_state(RuntimeState::Running);
         self.emit_state(RuntimeState::Running, None);
+        self.start_watcher(generation, &workspace);
         Ok(())
     }
 
@@ -312,6 +338,9 @@ impl<H: DesktopHost> RuntimeManager<H> {
     /// Graceful shutdown: protocol shutdown request, then the dispose ladder
     /// (stdin EOF, SIGTERM, SIGKILL) within the bounded grace window.
     pub fn stop(&self) -> Result<(), String> {
+        // Drop the watcher first: after this point no workspace change event
+        // can outlive the runtime generation it belongs to.
+        self.stop_watcher();
         let (child, stdin) = {
             let mut inner = self.inner.lock().unwrap();
             // Mark first so a concurrent monitor never schedules a restart.
@@ -355,6 +384,52 @@ impl<H: DesktopHost> RuntimeManager<H> {
         self.set_inner_state(RuntimeState::Stopped);
         self.emit_state(RuntimeState::Stopped, None);
         Ok(())
+    }
+
+    /// Arm or disarm the unsaved-changes quit guard; the frontend keeps it
+    /// in sync with dirty editor buffers.
+    pub fn set_quit_guard(&self, armed: bool) {
+        self.quit_guard.store(armed, Ordering::SeqCst);
+    }
+
+    /// Whether a quit attempt must pause for the frontend decision.
+    pub fn quit_guard_armed(&self) -> bool {
+        self.quit_guard.load(Ordering::SeqCst)
+    }
+
+    /// Final quit after the frontend decision: disarm and exit so the normal
+    /// RunEvent::Exit path stops the runtime (no orphan).
+    pub fn request_quit(&self) {
+        self.quit_guard.store(false, Ordering::SeqCst);
+        self.host.exit_app(0);
+    }
+
+    /// Tell the frontend that a quit attempt is waiting on unsaved changes.
+    pub fn emit_quit_guard_request(&self) {
+        self.host.emit_quit_guard(self.generation());
+    }
+
+    /// Start the generation-scoped native workspace watcher. Non-fatal on
+    /// failure: live sync degrades to manual refresh.
+    fn start_watcher(&self, generation: u64, workspace: &Path) {
+        if !workspace.is_dir() {
+            self.host.emit_log("workspace watcher: workspace is not a directory; live sync disabled");
+            return;
+        }
+        let host = self.host.clone();
+        let emit = move |changed: WorkspaceChanged| host.emit_workspace_changed(&changed);
+        match WorkspaceWatcher::start(workspace.to_path_buf(), generation, emit) {
+            Ok(watcher) => {
+                self.inner.lock().unwrap().watcher = Some(watcher);
+            }
+            Err(error) => self.host.emit_log(&format!("workspace watcher failed to start: {error}")),
+        }
+    }
+
+    /// Stop the current watcher (workspace change, restart, shutdown).
+    fn stop_watcher(&self) {
+        let watcher = self.inner.lock().unwrap().watcher.take();
+        drop(watcher);
     }
 
     fn shutdown_grace(&self) -> Duration {

@@ -35,6 +35,11 @@ function fakeHost(): FakeHost {
     subscribeFocus: vi.fn(() => () => {}),
     pickAttachments: vi.fn(async () => []),
     runtimeStatus: vi.fn(async () => ({ state: 'stopped' as const, generation: 0 })),
+    subscribeWorkspaceChanged: vi.fn(() => () => {}),
+    quitGuardArm: vi.fn(async () => {}),
+    subscribeQuitGuard: vi.fn(() => () => {}),
+    quitNow: vi.fn(async () => {}),
+    workspaceFiles: vi.fn(async () => []),
   }
 }
 

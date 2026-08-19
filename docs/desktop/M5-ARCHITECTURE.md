@@ -35,15 +35,15 @@ Recommendation: CodeMirror 6. It fits the existing Vite bundle, needs no worker/
 
 ## Quick Open architecture
 
-DESKTOP-ONLY. The existing bounded host listing builds an in-memory filename index (path + name, refreshed on focus and after saves). No second durable index exists upstream and none is created: the agent's content search keeps using the Harness tool-fs-search ripgrep pipeline. Cmd+P filters the in-memory index; opening a result reuses the Files/Editor open path.
+DESKTOP-ONLY (SHIPPED in M5B). An in-memory path-only index over 'git ls-files --cached --others --exclude-standard' (NUL-separated, honors .gitignore, fixed argv) with a bounded directory walk outside git repositories (skips .git/.DS_Store, never descends symlinked directories, 200,000-file cap). The host builds it on the blocking pool; the frontend discards stale results and rebuilds lazily on watcher invalidations. Cmd+P fuzzy-filters the index (basename prefix above path subsequence, capped at 50 results); opening a result reuses the Files/Editor open path and activates an existing tab. No second durable index exists upstream and none is created: the agent's content search keeps using the Harness tool-fs-search ripgrep pipeline.
 
-## File synchronization architecture
+## File synchronization architecture (SHIPPED in M5B)
 
-Editor open reads through desktop.fs.stat+read; the session keeps { version, content }. Save calls desktop.fs.edit with expectedVersion; on success the editor stores the returned version, clears dirty, and emits one local event that refreshes Files metadata, Changes, and Git status through the existing host commands — no manual full-app refresh. The fs/observed event stream (already durable in the runtime) is the future live-feed option; the first cut uses save-triggered refresh plus the M4 session/event-driven Changes refresh.
+One non-authoritative change source feeds every surface: a Rust workspace watcher (notify crate) owned by the runtime manager, scoped to the current workspace and generation, emitting path-only invalidation batches over the workspace://changed Tauri event (100 ms coalescing, 512-path flood cap, full flag when truncated). The frontend coalesces at 150 ms, drops stale generations, and invalidates Files, Changes, Git status/diff, open editor buffers, and the Quick Open index. Buffers reconcile per path: clean buffers auto-reload and stay clean (cursor/scroll preserved), dirty buffers keep the draft and surface an external-change conflict (Review/Reload vs Keep my changes), deleted files keep the tab in a deleted state and are never recreated, and transient absence during reconnect never marks deletion. After a runtime restart, buffers survive in UI memory and reconcile once a session is live again. FsVersion stays the only data authority; the watcher never decides content or version. Upstream fs/observed remains the harness-internal write-observation record and is deliberately NOT forwarded (it only fires for ctx.fs tool operations and cannot see Finder/terminal/external editors).
 
 ## Conflict detection strategy
 
-Optimistic concurrency on FsVersion: every save carries expectedVersion; a mismatch is a typed conflict error. When the editor knows the file changed underneath it (agent save, terminal edit, external app), the UI shows a conflict dialog with Reload (discard local) and Save a copy (never silent overwrite). Unsaved local changes are kept in memory only; a quit with dirty tabs asks for confirmation. External modifications are detected at save time via the version guard, which is the same authority the agent path already trusts.
+Optimistic concurrency on FsVersion: every save carries expectedVersion; a mismatch is a typed conflict error. External modifications are now detected proactively by the watcher (M5B): clean buffers auto-reload, dirty buffers enter an external-change conflict with Review/Reload and Keep my changes, and a later save with the stale version is still rejected by the guard — never a silent overwrite. Unsaved local changes are kept in memory only; a quit with dirty tabs pauses before any runtime teardown (Cancel / Discard and Quit / Save All and Quit).
 
 ## Git primitives found upstream
 
@@ -67,7 +67,7 @@ DEFER. PTY sessions are runtime-generation-owned by design; persisting terminals
 
 ## Desktop protocol impact
 
-No protocol v2. M5 adds optional additive v1 methods (desktop.fs.*, desktop.git.*); existing clients negotiate capabilities and ignore unknown methods. A version bump would only be justified by a breaking change to an existing method's semantics, which this design avoids.
+No protocol v2, and M5B adds no protocol methods at all: the watcher and quit guard ride the existing Tauri event/command surface (workspace://changed, desktop://quit-guard, and the quit_guard_arm/quit_now/workspace_files host commands), so the runtime single-executable and the JSON-RPC wire stay untouched. M5 adds optional additive v1 methods (desktop.fs.*, desktop.git.*) only where a capability needs the runtime; existing clients negotiate capabilities and ignore unknown methods. A version bump would only be justified by a breaking change to an existing method's semantics, which this design avoids.
 
 ## Localization impact
 
@@ -94,13 +94,16 @@ All M5 strings join the desktop strings namespace in en, zh, it, es, fr, de, pt-
 | git stage/unstage/restore host commands | DESKTOP-ONLY |
 | Diff parser extension | DESKTOP-ONLY |
 | Protocol desktop.fs.*/desktop.git.* | DESKTOP-ONLY (additive v1) |
+| Native workspace watcher + quit guard | DESKTOP-ONLY (Rust host; no runtime/protocol change) |
+| Quick Open index via git ls-files / bounded walk | DESKTOP-ONLY |
+| fs/observed forwarding | none — REUSE (verified, not forwarded) |
 | fs service changes | none — REUSE |
 | Expected UPSTREAM PATCH count | 0 |
 
 ## Proposed M5 implementation phases
 
 - M5A — editor foundation + safe read/write contract: desktop.fs.stat/read/write, CodeMirror shell, tabs, dirty, Cmd+S, open/close confirmation. SHIPPED: see docs/desktop/M5A-TESTING.md (editText was not needed for M5A; whole-file guarded writes cover the editor contract, and literal edits remain the agent tool's surface).
-- M5B — synchronization + conflicts + Quick Open: version-guard conflicts UX, save-driven refresh of Files/Changes/Git, Cmd+P index.
+- M5B — live synchronization + external-change handling + Quick Open: native workspace watcher with generation-scoped path-only invalidation, clean/dirty/delete buffer reconciliation, quit guard with dirty tabs, Cmd+P git-aware index. SHIPPED: see docs/desktop/M5B-TESTING.md and .agents/notes/implemented/architecture/2026-08-19-desktop-m5b-live-sync-and-quick-open.md.
 - M5C — staged/unstaged + file actions: git stage/unstage/restore commands with confirmations, staged/unstaged diff selector.
 - M5D — hunk actions: only if the apply-safe hunk generator proves simple; otherwise document the limitation.
 - M5E — regression/manual QA: extend M4-MANUAL-QA with editor saves, conflicts, and destructive confirmations on a fixture repository.
@@ -113,4 +116,5 @@ Rust: stage/unstage/restore against fixture repositories, pathspec injection rej
 
 - FsVersion semantics across agent and user writers must be exercised end-to-end (shared-version behavior is the one untested cross-writer assumption).
 - Hunk-level git apply is the only surface that may be dropped or deferred.
-- The fs/observed live feed, if adopted later, must respect generation isolation like the M4 projection store.
+- Rename is deliberately not followed (delete + create semantics): a renamed file keeps its old tab in deleted state until the user reopens it.
+- Watcher flood in pathological trees (millions of files) is bounded by the burst cap and the 200,000-file index cap; the watcher itself stays uncapped by design because it only invalidates.

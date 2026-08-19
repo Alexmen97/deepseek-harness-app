@@ -14,7 +14,7 @@ import { css } from '@codemirror/lang-css'
 import { markdown } from '@codemirror/lang-markdown'
 import { rust } from '@codemirror/lang-rust'
 import { useDesktopStrings, desktopPalette, useDesktopAppearance, type DesktopStringKey } from '@deepseek-ai/dsh-desktop-client/src/ui/strings'
-import { useEditorState, setBufferContent, saveBuffer, reloadBuffer, closeBuffer, setActiveBuffer, setEditorVisible, type EditorBuffer } from './editorStore.ts'
+import { useEditorState, setBufferContent, saveBuffer, saveAllBuffers, reloadBuffer, keepBufferChanges, closeBuffer, setActiveBuffer, setEditorVisible, type EditorBuffer } from './editorStore.ts'
 
 /** Extension language by file extension; unknown files stay plain text. */
 function languageFor(path: string): ReturnType<typeof javascript> | null {
@@ -39,7 +39,8 @@ function StatusLine({ buffer, t }: { buffer: EditorBuffer; t: (key: DesktopStrin
   if (buffer.status === 'dirty') label = t('editor.dirty')
   if (buffer.status === 'saving') label = t('editor.saving')
   if (buffer.status === 'saved') label = t('editor.saved')
-  if (buffer.status === 'conflict') label = t('editor.conflictState')
+  if (buffer.status === 'conflict') label = buffer.message === 'FS_EXTERNAL_CHANGE' ? t('editor.externalState') : t('editor.conflictState')
+  if (buffer.status === 'deleted') label = t('editor.deletedState')
   if (buffer.status === 'error') label = t('editor.saveError')
   return <span style={{ color: palette.muted, fontSize: 11 }}>{label}</span>
 }
@@ -92,7 +93,20 @@ export function EditorSurface(): ReactElement {
     if (view === undefined || active === undefined) return
     const current = view.state.doc.toString()
     if (current !== active.content) {
+      // Preserve cursor, selection, and scroll when an external reload or a
+      // clean-file adoption replaces the document.
+      const selection = view.state.selection.main
+      const scrollTop = view.scrollDOM.scrollTop
       view.dispatch({ changes: { from: 0, to: current.length, insert: active.content } })
+      if (selection.from <= active.content.length || selection.to <= active.content.length) {
+        view.dispatch({
+          selection: {
+            anchor: Math.min(selection.anchor, active.content.length),
+            head: Math.min(selection.head, active.content.length),
+          },
+        })
+      }
+      view.scrollDOM.scrollTop = scrollTop
     }
     view.dispatch({ effects: languageCompartment.current.reconfigure(languageFor(active.path) ?? []) })
   }, [active])
@@ -135,24 +149,36 @@ export function EditorSurface(): ReactElement {
               borderBottom: editor.activePath === path ? '2px solid #2f6fed' : '2px solid transparent',
               background: editor.activePath === path ? palette.input : 'transparent',
             }} onClick={() => { setActiveBuffer(path) }}>
-              <span style={{ maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{buffer.name}</span>
+              <span style={{ maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textDecoration: buffer.status === 'deleted' ? 'line-through' : 'none', color: buffer.status === 'deleted' ? palette.muted : palette.text }}>{buffer.name}</span>
               {buffer.status === 'dirty' && <span style={{ color: '#f85149' }}>●</span>}
+              {buffer.status === 'deleted' && <span style={{ color: '#f85149' }}>◌</span>}
               <button onClick={(event) => { event.stopPropagation(); requestClose(path) }} style={{ background: 'transparent', border: 'none', color: palette.muted, cursor: 'pointer', fontSize: 12 }} aria-label={t('editor.closeTab')}>×</button>
             </div>
           )
         })}
         <div style={{ flex: 1 }} />
-        {active !== undefined && (
+        {active !== undefined && active.status !== 'deleted' && (
           <button onClick={() => { void saveBuffer(active.path) }} style={{ marginRight: 10, background: '#2f6fed', border: 'none', color: '#fff', borderRadius: 6, padding: '4px 12px', fontSize: 12, cursor: 'pointer' }}>
             {t('editor.save')}
+          </button>
+        )}
+        {active !== undefined && active.status === 'dirty' && (
+          <button onClick={() => { void saveAllBuffers() }} style={{ marginRight: 10, background: 'transparent', border: '1px solid ' + palette.inputBorder, color: palette.text, borderRadius: 6, padding: '4px 12px', fontSize: 12, cursor: 'pointer' }}>
+            {t('editor.saveAll')}
           </button>
         )}
       </div>
       {active !== undefined && active.status === 'conflict' && (
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '8px 12px', borderBottom: '1px solid ' + palette.inputBorder, fontSize: 12 }}>
-          <span>{t('editor.conflictBody')}</span>
-          <button onClick={() => { void reloadBuffer(active.path) }} style={{ background: '#2f6fed', border: 'none', color: '#fff', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 12 }}>{t('editor.conflictReload')}</button>
-          <button onClick={() => {}} style={{ background: 'transparent', border: '1px solid ' + palette.inputBorder, color: palette.text, borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 12 }}>{t('editor.conflictKeep')}</button>
+          <span>{active.message === 'FS_EXTERNAL_CHANGE' ? t('editor.externalBody') : t('editor.conflictBody')}</span>
+          <button onClick={() => { void reloadBuffer(active.path) }} style={{ background: '#2f6fed', border: 'none', color: '#fff', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 12 }}>{active.message === 'FS_EXTERNAL_CHANGE' ? t('editor.externalReload') : t('editor.conflictReload')}</button>
+          <button onClick={() => { keepBufferChanges(active.path) }} style={{ background: 'transparent', border: '1px solid ' + palette.inputBorder, color: palette.text, borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 12 }}>{active.message === 'FS_EXTERNAL_CHANGE' ? t('editor.externalKeep') : t('editor.conflictKeep')}</button>
+        </div>
+      )}
+      {active !== undefined && active.status === 'deleted' && (
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '8px 12px', borderBottom: '1px solid ' + palette.inputBorder, fontSize: 12 }}>
+          <span>{t('editor.deletedBody')}</span>
+          <button onClick={() => { closeBuffer(active.path) }} style={{ background: 'transparent', border: '1px solid ' + palette.inputBorder, color: palette.text, borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 12 }}>{t('editor.deletedClose')}</button>
         </div>
       )}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 12px', borderBottom: '1px solid ' + palette.inputBorder }}>
