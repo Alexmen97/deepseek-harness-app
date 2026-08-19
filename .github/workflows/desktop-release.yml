@@ -126,6 +126,10 @@ jobs:
             fi
           fi
       - run: pnpm install --frozen-lockfile
+      - name: Build and typecheck
+        run: |
+          pnpm run build
+          pnpm exec tsc -p apps/desktop
       - name: Desktop tests
         run: pnpm exec vitest run packages/desktop packages/credentials/credentials-keychain packages/api/gateway packages/api/remotes apps/desktop/tests
       - name: Localization coverage
