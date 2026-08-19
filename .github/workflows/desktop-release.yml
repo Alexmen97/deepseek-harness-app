@@ -145,6 +145,9 @@ jobs:
         run: cargo test --lib
       - name: Build runtime executable
         run: node --import tsx/esm scripts/build-exe-for-desktop.ts
+      - name: Frontend build
+        working-directory: apps/desktop
+        run: pnpm exec vite build
       - name: Build app bundle
         working-directory: apps/desktop
         env:
