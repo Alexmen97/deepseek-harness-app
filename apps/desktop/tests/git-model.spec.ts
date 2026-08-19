@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { DesktopGitStatusV2 } from '@deepseek-ai/dsh-desktop-client'
-import { actionsFor, sortChanges, splitGitStatus, stageDirtyWarning, toWorkspacePath } from '../src/inspector/git-model.ts'
+import { actionsFor, discardBlockedReason, hasStagedSide, isDiscardEligible, sortChanges, splitGitStatus, stageDirtyWarning, toWorkspacePath } from '../src/inspector/git-model.ts'
 
 const STATUS: DesktopGitStatusV2 = {
   repository: true,
@@ -95,16 +95,48 @@ describe('M5C git status model', () => {
     const model = splitGitStatus(STATUS)
     const byPath = Object.fromEntries((model?.staged ?? []).map(e => [e.path, e]))
     Object.assign(byPath, Object.fromEntries((model?.unstaged ?? []).map(e => [e.path, e])))
-    expect(actionsFor(byPath['tracked.txt'] as never)).toEqual({ staged: 'unstage', changes: 'stage' })
+    expect(actionsFor(byPath['tracked.txt'] as never)).toEqual({ staged: 'unstage', changes: ['stage', 'discard'] })
     expect(actionsFor(byPath['added.txt'] as never)).toEqual({ staged: 'unstage' })
-    expect(actionsFor(byPath['worktree-only.txt'] as never)).toEqual({ changes: 'stage' })
-    expect(actionsFor(byPath['untracked.txt'] as never)).toEqual({ changes: 'stage' })
+    expect(actionsFor(byPath['worktree-only.txt'] as never)).toEqual({ changes: ['stage', 'discard'] })
+    expect(actionsFor(byPath['untracked.txt'] as never)).toEqual({ changes: ['stage'] })
     expect(actionsFor({ path: 'conflict.txt', status: 'UU', conflicted: true, insideWorkspace: true })).toEqual({})
   })
 
   it('derives no actions for rows outside the workspace', () => {
     const outside = { path: 'README.md', status: '.M', conflicted: false, insideWorkspace: false }
     expect(actionsFor(outside)).toEqual({})
+  })
+
+  it('marks discard eligibility from the porcelain state only', () => {
+    const mk = (status: string, extra: Record<string, unknown> = {}): never => ({ path: 'p.txt', status, conflicted: false, insideWorkspace: true, ...extra }) as never
+    expect(isDiscardEligible(mk('.M'))).toBe(true)
+    expect(isDiscardEligible(mk('.D'))).toBe(true)
+    expect(isDiscardEligible(mk('MM'))).toBe(true)
+    expect(isDiscardEligible(mk('MD'))).toBe(true)
+    expect(isDiscardEligible(mk('M.'))).toBe(false)
+    expect(isDiscardEligible(mk('D.'))).toBe(false)
+    expect(isDiscardEligible(mk('??'))).toBe(false)
+    expect(isDiscardEligible(mk('R.', { originalPath: 'old' }))).toBe(false)
+    expect(isDiscardEligible(mk('UU', { conflicted: true }))).toBe(false)
+    expect(isDiscardEligible(mk('.M', { insideWorkspace: false }))).toBe(false)
+  })
+
+  it('reports the staged side for precise confirmation copy', () => {
+    const mk = (status: string): never => ({ path: 'p.txt', status, conflicted: false, insideWorkspace: true }) as never
+    expect(hasStagedSide(mk('.M'))).toBe(false)
+    expect(hasStagedSide(mk('.D'))).toBe(false)
+    expect(hasStagedSide(mk('MM'))).toBe(true)
+    expect(hasStagedSide(mk('MD'))).toBe(true)
+    expect(hasStagedSide(mk('M.'))).toBe(true)
+    expect(hasStagedSide(mk('??'))).toBe(false)
+  })
+
+  it('blocks discard only for dirty buffers inside the workspace', () => {
+    const inside = { path: 'packages/frontend/app.ts', status: '.M', conflicted: false, insideWorkspace: true, workspacePath: 'app.ts' }
+    const outside = { path: 'README.md', status: '.M', conflicted: false, insideWorkspace: false }
+    expect(discardBlockedReason(inside, new Set(['app.ts']))).toBe('dirty')
+    expect(discardBlockedReason(inside, new Set(['other.ts']))).toBeUndefined()
+    expect(discardBlockedReason(outside, new Set([]))).toBeUndefined()
   })
 
   it('warns only when the row matches a dirty editor buffer inside the workspace', () => {

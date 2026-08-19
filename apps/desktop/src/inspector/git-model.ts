@@ -34,7 +34,31 @@ export interface GitStatusModel {
 /** The mutation actions a row may offer, keyed by the panel section. */
 export interface GitRowActions {
   staged?: 'unstage'
-  changes?: 'stage'
+  changes?: Array<'stage' | 'discard'>
+}
+
+/**
+ * Whether one tracked worktree change is discardable. Mirrors the host
+ * eligibility (git restore --worktree): Y = M or D with X in {., M, A};
+ * staged-only (Y = .), staged deletions (X = D), rename/copy entries,
+ * untracked, and conflicted rows are never discardable.
+ */
+export function isDiscardEligible(entry: GitChangeEntry): boolean {
+  if (entry.conflicted || !entry.insideWorkspace || entry.status === '??') return false
+  const x = entry.status.charAt(0)
+  const y = entry.status.charAt(1)
+  if (x === 'R' || x === 'C' || x === 'D' || y === '.') return false
+  return y === 'M' || y === 'D'
+}
+
+/**
+ * Whether the row has a staged side (index differs from HEAD), used to pick
+ * the precise confirmation copy: discard restores the worktree to the index.
+ */
+export function hasStagedSide(entry: GitChangeEntry): boolean {
+  if (entry.status === '??' || entry.conflicted) return false
+  const x = entry.status.charAt(0)
+  return x !== '.'
 }
 
 /** Whether the porcelain v2 XY pair reports an index-side (staged) change. */
@@ -104,11 +128,24 @@ export function splitGitStatus(status: DesktopGitStatusV2 | undefined): GitStatu
  */
 export function actionsFor(entry: GitChangeEntry): GitRowActions {
   if (entry.conflicted || !entry.insideWorkspace) return {}
-  if (entry.status === '??') return { changes: 'stage' }
+  if (entry.status === '??') return { changes: ['stage'] }
+  const changes: Array<'stage' | 'discard'> = []
+  if (isUnstaged(entry)) changes.push('stage')
+  if (isDiscardEligible(entry)) changes.push('discard')
   return {
     ...(isStaged(entry) ? { staged: 'unstage' as const } : {}),
-    ...(isUnstaged(entry) ? { changes: 'stage' as const } : {}),
+    ...(changes.length > 0 ? { changes } : {}),
   }
+}
+
+/**
+ * Why a Discard action must be blocked. Only the frontend knows CodeMirror
+ * state; this is a UI data-loss guard, not a filesystem security boundary
+ * (the host still validates git/path state independently).
+ */
+export function discardBlockedReason(entry: GitChangeEntry, dirtyWorkspacePaths: ReadonlySet<string>): 'dirty' | undefined {
+  if (!isDiscardEligible(entry)) return undefined
+  return entry.workspacePath !== undefined && dirtyWorkspacePaths.has(entry.workspacePath) ? 'dirty' : undefined
 }
 
 /**

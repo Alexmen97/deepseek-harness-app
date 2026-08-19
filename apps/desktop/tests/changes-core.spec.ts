@@ -17,8 +17,11 @@ interface FakeHost extends ChangesHost {
   statusCalls(): number
   diffCalls(): number
   stageCalls(): number
+  discardCalls(): number
   failNextStage(): void
+  failNextDiscard(error: DesktopGitError): void
   holdNextStage(): (value?: undefined) => void
+  holdNextDiscard(): (value?: undefined) => void
 }
 
 function fakeHost(): FakeHost {
@@ -26,17 +29,27 @@ function fakeHost(): FakeHost {
   let statusCalls = 0
   let diffCalls = 0
   let stageCalls = 0
+  let discardCalls = 0
   let stageError: DesktopGitError | undefined
+  let discardError: DesktopGitError | undefined
   let held: { resolve: (value: undefined) => void } | undefined
+  let heldDiscard: { resolve: (value: undefined) => void } | undefined
   return {
     calls,
     statusCalls: () => statusCalls,
     diffCalls: () => diffCalls,
     stageCalls: () => stageCalls,
+    discardCalls: () => discardCalls,
     failNextStage: () => { stageError = ERROR },
+    failNextDiscard: (error) => { discardError = error },
     holdNextStage: () => {
       const holder = { resolve: (_value: undefined) => {} }
       held = holder
+      return (value?: undefined) => { holder.resolve(value) }
+    },
+    holdNextDiscard: () => {
+      const holder = { resolve: (_value: undefined) => {} }
+      heldDiscard = holder
       return (value?: undefined) => { holder.resolve(value) }
     },
     gitStatusV2: async () => { statusCalls += 1; return STATUS },
@@ -56,6 +69,20 @@ function fakeHost(): FakeHost {
       }
     },
     gitUnstageFile: async (path) => { calls.push('unstage:' + path) },
+    gitDiscardFile: async (path) => {
+      discardCalls += 1
+      calls.push('discard:' + path)
+      if (discardError !== undefined) {
+        const error = discardError
+        discardError = undefined
+        throw error
+      }
+      if (heldDiscard !== undefined) {
+        const holder = heldDiscard
+        heldDiscard = undefined
+        return new Promise<void>((resolve) => { holder.resolve = resolve })
+      }
+    },
   }
 }
 
@@ -126,6 +153,50 @@ describe('M5C.2 changes operations core', () => {
     expect(core.getOps().errors['a.txt']).toBeDefined()
     await core.stage('a.txt')
     expect(core.getOps().errors['a.txt']).toBeUndefined()
+  })
+
+  it('discards, refreshes after success, and clears errors', async () => {
+    const host = fakeHost()
+    const core = createChangesCore(host)
+    await core.refresh()
+    await core.discard('a.txt')
+    expect(host.calls).toContain('discard:a.txt')
+    expect(host.statusCalls()).toBe(2)
+    expect(core.getOps().pending['a.txt']).toBeUndefined()
+    expect(core.getOps().errors['a.txt']).toBeUndefined()
+  })
+
+  it('blocks discard on a dirty editor buffer without invoking the host', async () => {
+    const host = fakeHost()
+    const core = createChangesCore(host, { isDirty: path => path === 'a.txt' })
+    await core.refresh()
+    await core.discard('a.txt')
+    expect(host.calls).not.toContain('discard:a.txt')
+    expect(core.getOps().errors['a.txt']?.code).toBe('DIRTY_EDITOR_BLOCK')
+    expect(core.getOps().pending['a.txt']).toBeUndefined()
+  })
+
+  it('reports discarding pending state and blocks duplicate clicks', async () => {
+    const host = fakeHost()
+    const core = createChangesCore(host)
+    const resolve = host.holdNextDiscard()
+    const first = core.discard('a.txt')
+    expect(core.getOps().pending['a.txt']).toBe('discarding')
+    await core.discard('a.txt')
+    expect(host.discardCalls()).toBe(1)
+    resolve(undefined)
+    await first
+    expect(core.getOps().pending['a.txt']).toBeUndefined()
+  })
+
+  it('surfaces typed discard errors (state changed) and keeps the model', async () => {
+    const host = fakeHost()
+    host.failNextDiscard({ code: 'GIT_STATE_CHANGED', message: 'state changed' })
+    const core = createChangesCore(host)
+    await core.refresh()
+    await core.discard('a.txt')
+    expect(core.getOps().errors['a.txt']?.code).toBe('GIT_STATE_CHANGED')
+    expect(host.statusCalls()).toBe(1)
   })
 
   it('notifies subscribers on state changes', async () => {

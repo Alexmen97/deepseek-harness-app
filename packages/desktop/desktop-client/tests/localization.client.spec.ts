@@ -23,6 +23,7 @@ function fakeHost(): FakeHost {
     revealInPath: vi.fn(async () => {}),
     gitStatus: vi.fn(async () => ({ repository: false })),
     gitStageFile: vi.fn(async () => {}),
+    gitDiscardFile: vi.fn(async () => {}),
     gitUnstageFile: vi.fn(async () => {}),
     gitStatusV2: vi.fn(async () => ({ repository: false })),
     gitDiff: vi.fn(async () => ({ repository: false })),

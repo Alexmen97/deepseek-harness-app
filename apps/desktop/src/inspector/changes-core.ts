@@ -12,10 +12,17 @@ export interface ChangesHost {
   gitDiff(): Promise<DesktopGitDiff>
   gitStageFile(path: string): Promise<void>
   gitUnstageFile(path: string): Promise<void>
+  gitDiscardFile(path: string): Promise<void>
+}
+
+/** Options for the operations core; the discard guard is a UI data-loss guard only. */
+export interface ChangesCoreOptions {
+  /** Whether the editor holds unsaved changes for a workspace path; blocks discard. */
+  isDirty?(path: string): boolean
 }
 
 /** Per-file operation state; a path is either idle, in flight, or failed. */
-export type ChangeOpState = 'idle' | 'staging' | 'unstaging'
+export type ChangeOpState = 'idle' | 'staging' | 'unstaging' | 'discarding'
 
 export interface ChangesOpsState {
   /** Path (repository-relative, matching the v2 model) -> in-flight operation. */
@@ -25,9 +32,6 @@ export interface ChangesOpsState {
 }
 
 export interface ChangesCore {
-  /** Refresh the porcelain-v2 model and the diff after a host operation. */
-  /** Stage one repository-relative path; no-op while that path is pending. */
-  /** Unstage one repository-relative path; no-op while that path is pending. */
   getStatus: () => DesktopGitStatusV2 | undefined
   getDiff: () => DesktopGitDiff | undefined
   getOps: () => ChangesOpsState
@@ -37,13 +41,15 @@ export interface ChangesCore {
   stage: (path: string) => Promise<void>
   /** Unstage one repository-relative path; no-op while that path is pending. */
   unstage: (path: string) => Promise<void>
+  /** Discard one tracked worktree change; blocked locally while the editor is dirty. */
+  discard: (path: string) => Promise<void>
   subscribe: (listener: () => void) => () => void
 }
 
 const EMPTY_OPS: ChangesOpsState = { pending: {}, errors: {} }
 
 /** Create the Changes operations core over an injected host. */
-export function createChangesCore(host: ChangesHost): ChangesCore {
+export function createChangesCore(host: ChangesHost, options: ChangesCoreOptions = {}): ChangesCore {
   let status: DesktopGitStatusV2 | undefined
   let diff: DesktopGitDiff | undefined
   let ops: ChangesOpsState = { pending: {}, errors: {} }
@@ -76,6 +82,24 @@ export function createChangesCore(host: ChangesHost): ChangesCore {
     emit()
   }
 
+  const run = async (path: string, state: ChangeOpState, runHost: () => Promise<void>): Promise<void> => {
+    if (ops.pending[path] !== undefined) return
+    setPending(path, state)
+    emit()
+    try {
+      await runHost()
+      setError(path, undefined)
+      await refresh()
+    } catch (error) {
+      setError(path, error as DesktopGitError)
+      // Server state did not change: keep the current UI and model.
+      emit()
+    } finally {
+      setPending(path, 'idle')
+      emit()
+    }
+  }
+
   return {
     getStatus: () => status,
     getDiff: () => diff,
@@ -85,39 +109,17 @@ export function createChangesCore(host: ChangesHost): ChangesCore {
       return () => { listeners.delete(listener) }
     },
     refresh,
-    stage: async (path) => {
-      if (ops.pending[path] !== undefined) return
-      setPending(path, 'staging')
-      emit()
-      try {
-        await host.gitStageFile(path)
-        setError(path, undefined)
-        await refresh()
-      } catch (error) {
-        setError(path, error as DesktopGitError)
-        // Server state did not change: keep the current UI and model.
-        emit()
-      } finally {
-        setPending(path, 'idle')
-        emit()
+    stage: path => run(path, 'staging', () => host.gitStageFile(path)),
+    unstage: path => run(path, 'unstaging', () => host.gitUnstageFile(path)),
+    discard: path => run(path, 'discarding', () => {
+      if (options.isDirty?.(path) === true) {
+        // UI data-loss guard: never invoke the host for a dirty editor buffer.
+        const error = new Error('This file has unsaved editor changes. Save or discard the editor draft before discarding changes from disk.') as DesktopGitError & Error
+        error.code = 'DIRTY_EDITOR_BLOCK'
+        throw error
       }
-    },
-    unstage: async (path) => {
-      if (ops.pending[path] !== undefined) return
-      setPending(path, 'unstaging')
-      emit()
-      try {
-        await host.gitUnstageFile(path)
-        setError(path, undefined)
-        await refresh()
-      } catch (error) {
-        setError(path, error as DesktopGitError)
-        emit()
-      } finally {
-        setPending(path, 'idle')
-        emit()
-      }
-    },
+      return host.gitDiscardFile(path)
+    }),
   }
 }
 

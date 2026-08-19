@@ -41,6 +41,29 @@ M5C.1 is read-only (no stage/unstage/discard actions yet): the interactive pass 
 
 The interactive pass of the full flow list (M5C.2 items 1-22 in the milestone brief) is scheduled for M5C.5 on a disposable git fixture. The mutation semantics (stage/unstage round trips, containment, dirty-buffer warning, per-file pending/error states) are pinned by the automated suites above.
 
+## M5C.3 - tracked-worktree Discard
+
+### Rust (apps/desktop/src-tauri, cargo test)
+
+- `commands::tests::discard_modified_tracked_restores_head_content` - .M discard restores HEAD content and leaves the worktree clean.
+- `commands::tests::discard_staged_and_unstaged_restores_index_not_head` - mandatory case: index B + worktree C, discard -> worktree B, status M. (staged remains, unstaged disappears).
+- `commands::tests::discard_staged_modified_worktree_deleted_recreates_from_index` - MD recreates the file from the index.
+- `commands::tests::discard_deleted_tracked_restores_the_file` - .D restores the deleted file.
+- `commands::tests::discard_rejects_staged_deletion` - D. is UNSUPPORTED (git restore --worktree fails when the index holds the deletion).
+- `commands::tests::discard_rejects_staged_only_and_untracked_and_rename_and_conflict` - M. / ?? / R. / u all refuse with UNSUPPORTED_GIT_STATE; untracked files stay untouched.
+- `commands::tests::discard_revalidates_state_and_rejects_stale_or_missing_paths` - fresh-state revalidation before the destructive mutation; missing paths report GIT_STATE_CHANGED.
+- `commands::tests::discard_enforces_workspace_containment` - workspace subdirectory: inside allowed, outside/../absolute rejected with PATH_OUTSIDE_WORKSPACE.
+
+### Vitest (apps/desktop/tests)
+
+- `git-model.spec.ts` - isDiscardEligible matrix (Y=M/D with X in {., M, A}; M., D., ??, R., conflict, outside all false), hasStagedSide for the confirmation copy, discardBlockedReason (dirty editor inside workspace blocks; clean and outside never), actionsFor now returns changes as an array including 'discard'.
+- `changes-core.spec.ts` - discard success refreshes and clears errors; dirty editor blocks WITHOUT invoking the host (DIRTY_EDITOR_BLOCK typed error); discarding pending state and duplicate-click prevention; typed GIT_STATE_CHANGED error keeps the model unchanged.
+- Localization: 9 new keys (discard, discardTitle, discardConsequence, discardConsequenceStaged, discardBlockedDirty, discarding, stateChanged, cannotDiscard, cancel) in all seven locales; desktop:i18n:check at 853 keys x 7 locales.
+
+### Manual QA record
+
+The interactive discard flows (tracked modified, staged+unstaged, dirty block, deleted restore, cancel/confirm, dash file, subdir containment, no crash, Cmd+Q, no orphan) are scheduled for M5C.5 on a disposable fixture; the semantics are pinned by the automated suites above (honest label: automated only).
+
 ## CI fix (M5C.2)
 
 - `scripts/prepare-desktop-rust-tests.mjs` now stages the `dsh-desktop-runtime-spawn-helper` placeholder alongside the runtime placeholder, closing the CI Desktop failure (M5B.2/M5C.1) where tauri.conf.json declared the spawn-helper bundle resource but the deterministic staging script did not create it; `check-desktop-rust-resources.mjs` now passes in a clean checkout.

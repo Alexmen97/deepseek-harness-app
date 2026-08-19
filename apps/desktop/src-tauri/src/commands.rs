@@ -850,6 +850,78 @@ pub fn git_unstage_file(app: tauri::AppHandle, path: String) -> Result<(), GitEr
     git_unstage_at(&root, &path)
 }
 
+/// Whether the porcelain-v2 entry for one tracked path has discardable
+/// worktree changes. Verified on real fixtures (git 2.50.1):
+///
+/// - Y = M or D with X in {., M, A}: `git restore --worktree` restores the
+///   worktree to the INDEX version (not necessarily HEAD); staged state
+///   stays staged (MM -> M., MD recreates from the index, AM -> M. index).
+/// - X = D (staged deletion): restore fails (the index holds no worktree
+///   blob to recreate), so Discard is unsupported.
+/// - Y = . (staged-only): there is no worktree change to discard.
+/// - rename/copy entries (X = R/C): one-command semantics are ambiguous
+///   (restore on the new path is a no-op for a staged rename), so Discard
+///   is unsupported and no multi-command rename restoration is invented.
+/// - untracked (??) and conflicted (u): never discardable.
+fn discard_eligible(status_xy: &str, conflicted: bool) -> bool {
+    if conflicted {
+        return false;
+    }
+    let mut chars = status_xy.chars();
+    let (Some(x), Some(y)) = (chars.next(), chars.next()) else { return false };
+    if matches!(x, 'R' | 'C') || x == 'D' || y == '.' {
+        return false;
+    }
+    matches!(y, 'M' | 'D')
+}
+
+/// Revalidate the current porcelain-v2 state for one path immediately
+/// before a destructive discard, so a stale UI row never mutates the
+/// worktree under outdated assumptions.
+fn revalidate_discard(workspace: &Path, repo_rel: &str) -> Result<(), GitError> {
+    let status = git_status_v2_at(workspace).map_err(|error| GitError::new("GIT_OPERATION_FAILED", error))?;
+    if !status["repository"].as_bool().unwrap_or(false) {
+        return Err(GitError::not_git());
+    }
+    let Some(files) = status["files"].as_array() else {
+        return Err(GitError::new("GIT_STATE_CHANGED", "the Git state changed; refresh and retry"));
+    };
+    let Some(entry) = files.iter().find(|file| file["path"].as_str() == Some(repo_rel)) else {
+        return Err(GitError::new("GIT_STATE_CHANGED", "the file is no longer in the expected Git state"));
+    };
+    let conflicted = entry["conflicted"].as_bool().unwrap_or(false);
+    let xy = entry["status"].as_str().unwrap_or("");
+    if !discard_eligible(xy, conflicted) {
+        return Err(GitError::unsupported_state());
+    }
+    Ok(())
+}
+
+/// Discard one tracked worktree change: `git restore --worktree -- <path>`.
+/// The worktree is the only thing mutated; the index and HEAD stay intact.
+fn git_discard_at(workspace: &Path, repo_rel: &str) -> Result<(), GitError> {
+    // Containment first: malicious inputs (outside workspace, ../, absolute,
+    // symlink escape) are rejected before any git state is read, so the
+    // typed error is PATH_OUTSIDE_WORKSPACE, never a state category.
+    let rel = workspace_rel_for(workspace, repo_rel)?;
+    contained_git_path(workspace, &rel)?;
+    // Current-state revalidation immediately before the destructive
+    // mutation; a stale UI row is refused under the fresh porcelain state.
+    revalidate_discard(workspace, repo_rel)?;
+    let output = git_run(workspace, &["restore", "--worktree", "--", rel.as_str()])?;
+    if !output.status.success() {
+        return Err(GitError::operation_failed(&output.stderr));
+    }
+    Ok(())
+}
+
+/// Discard one workspace file through the narrow Tauri host capability.
+#[tauri::command]
+pub fn git_discard_file(app: tauri::AppHandle, path: String) -> Result<(), GitError> {
+    let root = workspace_root(&app).map_err(GitError::workspace)?;
+    git_discard_at(&root, &path)
+}
+
 
 /// Git status body over an explicit root for tests.
 fn git_status_at(root: &Path) -> Result<Value, String> {
@@ -1493,6 +1565,172 @@ mod tests {
 
         assert_eq!(git_stage_at(&root, "conflict.txt").unwrap_err().code, "UNSUPPORTED_GIT_STATE");
         assert_eq!(git_unstage_at(&root, "conflict.txt").unwrap_err().code, "UNSUPPORTED_GIT_STATE");
+    }
+
+    fn v2_files_of(root: &Path) -> Vec<Value> {
+        git_status_v2_at(root).unwrap()["files"].as_array().unwrap().clone()
+    }
+
+    fn git_init_committed(root: &Path, files: &[(&str, &str)]) {
+        let git = |args: &[&str]| {
+            Command::new("git").current_dir(root).args(args).output().expect("git available")
+        };
+        assert!(git(&["init", "-q", "-b", "main"]).status.success());
+        assert!(git(&["config", "user.email", "m5c3@example.test"]).status.success());
+        assert!(git(&["config", "user.name", "M5C3 Test"]).status.success());
+        for (name, content) in files {
+            let target = root.join(name);
+            if let Some(parent) = target.parent() {
+                fs::create_dir_all(parent).unwrap();
+            }
+            fs::write(target, content).unwrap();
+        }
+        assert!(git(&["add", "."]).status.success());
+        assert!(git(&["commit", "-q", "-m", "initial"]).status.success());
+    }
+
+    #[test]
+    fn discard_modified_tracked_restores_head_content() {
+        let root = fixture_root("m5c3-modified");
+        git_init_committed(&root, &[("f.txt", "A\n")]);
+        fs::write(root.join("f.txt"), "B\n").unwrap();
+        assert_eq!(status_of(&root, "f.txt"), ".M");
+
+        git_discard_at(&root, "f.txt").unwrap();
+        let files = v2_files_of(&root);
+        assert!(files.is_empty(), "worktree should be clean: {files:?}");
+        assert_eq!(fs::read_to_string(root.join("f.txt")).unwrap(), "A\n");
+    }
+
+    #[test]
+    fn discard_staged_and_unstaged_restores_index_not_head() {
+        let root = fixture_root("m5c3-mm");
+        git_init_committed(&root, &[("f.txt", "A\n")]);
+        // index = B, worktree = C
+        fs::write(root.join("f.txt"), "B\n").unwrap();
+        let git = |args: &[&str]| {
+            Command::new("git").current_dir(&root).args(args).output().expect("git available")
+        };
+        assert!(git(&["add", "f.txt"]).status.success());
+        fs::write(root.join("f.txt"), "C\n").unwrap();
+        assert_eq!(status_of(&root, "f.txt"), "MM");
+
+        git_discard_at(&root, "f.txt").unwrap();
+        // worktree restored to the INDEX version B; staged change remains.
+        assert_eq!(status_of(&root, "f.txt"), "M.");
+        assert_eq!(fs::read_to_string(root.join("f.txt")).unwrap(), "B\n");
+    }
+
+    #[test]
+    fn discard_staged_modified_worktree_deleted_recreates_from_index() {
+        let root = fixture_root("m5c3-md");
+        git_init_committed(&root, &[("m.txt", "A\n")]);
+        let git = |args: &[&str]| {
+            Command::new("git").current_dir(&root).args(args).output().expect("git available")
+        };
+        fs::write(root.join("m.txt"), "B\n").unwrap();
+        assert!(git(&["add", "m.txt"]).status.success());
+        fs::remove_file(root.join("m.txt")).unwrap();
+        assert_eq!(status_of(&root, "m.txt"), "MD");
+
+        git_discard_at(&root, "m.txt").unwrap();
+        assert_eq!(status_of(&root, "m.txt"), "M.");
+        assert_eq!(fs::read_to_string(root.join("m.txt")).unwrap(), "B\n");
+    }
+
+    #[test]
+    fn discard_deleted_tracked_restores_the_file() {
+        let root = fixture_root("m5c3-deleted");
+        git_init_committed(&root, &[("g.txt", "A2\n")]);
+        fs::remove_file(root.join("g.txt")).unwrap();
+        assert_eq!(status_of(&root, "g.txt"), ".D");
+
+        git_discard_at(&root, "g.txt").unwrap();
+        let files = v2_files_of(&root);
+        assert!(files.is_empty(), "worktree should be clean: {files:?}");
+        assert_eq!(fs::read_to_string(root.join("g.txt")).unwrap(), "A2\n");
+    }
+
+    #[test]
+    fn discard_rejects_staged_deletion() {
+        let root = fixture_root("m5c3-dot");
+        git_init_committed(&root, &[("g.txt", "x\n")]);
+        let git = |args: &[&str]| {
+            Command::new("git").current_dir(&root).args(args).output().expect("git available")
+        };
+        assert!(git(&["rm", "-q", "g.txt"]).status.success());
+        assert_eq!(status_of(&root, "g.txt"), "D.");
+        assert_eq!(git_discard_at(&root, "g.txt").unwrap_err().code, "UNSUPPORTED_GIT_STATE");
+    }
+
+    #[test]
+    fn discard_rejects_staged_only_and_untracked_and_rename_and_conflict() {
+        let root = fixture_root("m5c3-rejects");
+        git_init_committed(&root, &[("a.txt", "A\n"), ("old.txt", "R\n")]);
+        let git = |args: &[&str]| {
+            Command::new("git").current_dir(&root).args(args).output().expect("git available")
+        };
+        // staged-only: Y = .
+        fs::write(root.join("a.txt"), "B\n").unwrap();
+        assert!(git(&["add", "a.txt"]).status.success());
+        assert_eq!(status_of(&root, "a.txt"), "M.");
+        assert_eq!(git_discard_at(&root, "a.txt").unwrap_err().code, "UNSUPPORTED_GIT_STATE");
+
+        // untracked: never discardable
+        fs::write(root.join("u.txt"), "U\n").unwrap();
+        assert_eq!(git_discard_at(&root, "u.txt").unwrap_err().code, "UNSUPPORTED_GIT_STATE");
+        assert_eq!(fs::read_to_string(root.join("u.txt")).unwrap(), "U\n");
+
+        // staged rename: entry 2 R.
+        assert!(git(&["mv", "old.txt", "new.txt"]).status.success());
+        assert_eq!(git_discard_at(&root, "new.txt").unwrap_err().code, "UNSUPPORTED_GIT_STATE");
+
+        // conflict
+        fs::write(root.join("c.txt"), "base\n").unwrap();
+        assert!(git(&["add", "c.txt"]).status.success());
+        assert!(git(&["commit", "-q", "-m", "c"]).status.success());
+        assert!(git(&["checkout", "-q", "-b", "side"]).status.success());
+        fs::write(root.join("c.txt"), "side\n").unwrap();
+        assert!(git(&["commit", "-qam", "side"]).status.success());
+        assert!(git(&["checkout", "-q", "main"]).status.success());
+        fs::write(root.join("c.txt"), "main\n").unwrap();
+        assert!(git(&["commit", "-qam", "main"]).status.success());
+        let _ = git(&["merge", "side"]);
+        assert_eq!(git_discard_at(&root, "c.txt").unwrap_err().code, "UNSUPPORTED_GIT_STATE");
+    }
+
+    #[test]
+    fn discard_revalidates_state_and_rejects_stale_or_missing_paths() {
+        let root = fixture_root("m5c3-stale");
+        git_init_committed(&root, &[("f.txt", "A\n")]);
+        fs::write(root.join("f.txt"), "B\n").unwrap();
+        // UI shows eligible, then the state changes to staged-only before
+        // the host call: the host must refuse under the fresh state.
+        let git = |args: &[&str]| {
+            Command::new("git").current_dir(&root).args(args).output().expect("git available")
+        };
+        assert!(git(&["add", "f.txt"]).status.success());
+        assert_eq!(git_discard_at(&root, "f.txt").unwrap_err().code, "UNSUPPORTED_GIT_STATE");
+
+        // A path with no entry at all reports the state-changed category.
+        assert_eq!(git_discard_at(&root, "missing.txt").unwrap_err().code, "GIT_STATE_CHANGED");
+    }
+
+    #[test]
+    fn discard_enforces_workspace_containment() {
+        let root = fixture_root("m5c3-containment");
+        git_init_committed(&root, &[("packages/frontend/app.ts", "app\n"), ("README.md", "root\n")]);
+        let workspace = root.join("packages/frontend");
+        fs::write(root.join("packages/frontend/app.ts"), "edited\n").unwrap();
+        fs::write(root.join("README.md"), "edited\n").unwrap();
+
+        // Inside the workspace: allowed.
+        git_discard_at(&workspace, "packages/frontend/app.ts").unwrap();
+        // Same repository, outside the workspace: rejected.
+        assert_eq!(git_discard_at(&workspace, "README.md").unwrap_err().code, "PATH_OUTSIDE_WORKSPACE");
+        // Parent-relative and absolute inputs rejected.
+        assert_eq!(git_discard_at(&workspace, "../frontend/app.ts").unwrap_err().code, "PATH_OUTSIDE_WORKSPACE");
+        assert_eq!(git_discard_at(&workspace, "/etc/passwd").unwrap_err().code, "PATH_OUTSIDE_WORKSPACE");
     }
 
     #[test]

@@ -84,6 +84,8 @@ export interface DesktopHost {
   gitStageFile(path: string): Promise<void>
   /** Unstage one workspace file (git restore --staged / rm --cached); rejects with DesktopGitError. */
   gitUnstageFile(path: string): Promise<void>
+  /** Discard one tracked worktree change (git restore --worktree -- <path>); rejects with DesktopGitError. */
+  gitDiscardFile(path: string): Promise<void>
   /** Reveal the runtime log files in the system viewer. */
   openLogs(): Promise<void>
   /** Open an external URL in the system browser. */
@@ -170,7 +172,8 @@ export interface DesktopGitStatusV2 {
 export interface DesktopGitError {
   /**
    * Stable category: GIT_NOT_FOUND, NOT_GIT_REPOSITORY, PATH_OUTSIDE_WORKSPACE,
-   * PATH_NOT_FOUND, UNSUPPORTED_GIT_STATE, GIT_OPERATION_FAILED, WORKSPACE_UNAVAILABLE.
+   * PATH_NOT_FOUND, UNSUPPORTED_GIT_STATE, GIT_OPERATION_FAILED, WORKSPACE_UNAVAILABLE,
+   * GIT_STATE_CHANGED, DIRTY_EDITOR_BLOCK (the latter is a frontend-only UI guard).
    */
   code: string
   message: string

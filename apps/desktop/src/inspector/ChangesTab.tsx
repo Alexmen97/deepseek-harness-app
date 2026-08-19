@@ -1,16 +1,17 @@
 /** M4/M5C working-tree changes: porcelain-v2 status model with the Staged
- * Changes / Changes split and per-file Stage / Unstage actions (M5C.2).
- * Discard, hunk operations, and commit flows are out of scope. */
+ * Changes / Changes split and per-file Stage / Unstage / Discard actions
+ * (M5C.2 stage/unstage, M5C.3 tracked-worktree discard with confirmation).
+ * Hunk operations and commit flows are out of scope. */
 
-import { useCallback, useEffect, useMemo, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import type { ReactElement } from 'react'
-import { desktopBindings } from '@deepseek-ai/dsh-desktop-client'
+import { desktopBindings, type DesktopGitError } from '@deepseek-ai/dsh-desktop-client'
 import { useDesktopStrings, desktopPalette, useDesktopAppearance } from '@deepseek-ai/dsh-desktop-client/src/ui/strings'
 import { parseDiff, statusCategory } from './diff.ts'
-import { actionsFor, sortChanges, splitGitStatus, stageDirtyWarning, type GitChangeEntry } from './git-model.ts'
+import { actionsFor, discardBlockedReason, hasStagedSide, sortChanges, splitGitStatus, stageDirtyWarning, type GitChangeEntry } from './git-model.ts'
 import { createChangesCore, type ChangesCore } from './changes-core.ts'
 import { onFilesInvalidated } from './filesync.ts'
-import { useEditorState } from './editorStore.ts'
+import { getEditorState, useEditorState } from './editorStore.ts'
 
 let core: ChangesCore | undefined
 const getCore = (): ChangesCore => {
@@ -21,9 +22,22 @@ const getCore = (): ChangesCore => {
       gitDiff: () => host.gitDiff().then(diff => diff),
       gitStageFile: async (path) => { await host.gitStageFile(path) },
       gitUnstageFile: async (path) => { await host.gitUnstageFile(path) },
+      gitDiscardFile: async (path) => { await host.gitDiscardFile(path) },
+    }, {
+      // UI data-loss guard only: the Rust host validates git/path state independently.
+      isDirty: path => getEditorState().buffers[path]?.status === 'dirty',
     })
   }
   return core
+}
+
+type RowAction = 'stage' | 'unstage' | 'discard'
+
+const errorText = (t: (key: string) => string, error: DesktopGitError): string => {
+  if (error.code === 'DIRTY_EDITOR_BLOCK') return t('changes.discardBlockedDirty')
+  if (error.code === 'GIT_STATE_CHANGED') return t('changes.stateChanged')
+  if (error.code === 'UNSUPPORTED_GIT_STATE') return t('changes.cannotDiscard')
+  return t('changes.opFailed') + ': ' + error.message
 }
 
 export function ChangesTab(): ReactElement {
@@ -34,14 +48,15 @@ export function ChangesTab(): ReactElement {
   const status = useSyncExternalStore(operations.subscribe, operations.getStatus)
   const diff = useSyncExternalStore(operations.subscribe, operations.getDiff)
   const ops = useSyncExternalStore(operations.subscribe, operations.getOps)
+  const [confirming, setConfirming] = useState<GitChangeEntry | undefined>(undefined)
 
   const refresh = useCallback((): void => { void operations.refresh() }, [operations])
   useEffect(() => { void operations.refresh() }, [operations])
 
   // M5B live refresh: watcher invalidations re-run git status and the diff
-  // in one debounced pass; git never runs per filesystem event. Stage/unstage
-  // refresh directly after the host operation (the watcher does not own
-  // index changes).
+  // in one debounced pass; git never runs per filesystem event. Stage/
+  // unstage/discard refresh directly after the host operation (the watcher
+  // does not own index changes; discard also refreshes git immediately).
   useEffect(() => {
     return onFilesInvalidated(() => { refresh() })
   }, [refresh])
@@ -82,9 +97,16 @@ export function ChangesTab(): ReactElement {
       {(kind === 'add' ? '+ ' : kind === 'del' ? '- ' : '  ') + text}
     </div>
   )
-  const actionButton = (entry: GitChangeEntry, action: 'stage' | 'unstage', key: number): ReactElement => {
+  const actionButton = (entry: GitChangeEntry, action: RowAction, key: number): ReactElement => {
     const pending = ops.pending[entry.path]
     const busy = pending !== undefined
+    const discardBlocked = action === 'discard' && discardBlockedReason(entry, dirtyPaths) !== undefined
+    const destructive = action === 'discard'
+    const label = destructive
+      ? (busy && pending === 'discarding' ? t('changes.discarding') : t('changes.discard'))
+      : action === 'stage'
+        ? (busy && pending === 'staging' ? t('changes.staging') : t('changes.stage'))
+        : (busy && pending === 'unstaging' ? t('changes.unstaging') : t('changes.unstage'))
     return (
       <div key={key} style={{ display: 'flex', gap: 6, alignItems: 'center', padding: '1px 0', color: palette.text, fontSize: 12 }}>
         <span style={{ color: palette.muted, minWidth: 20 }}>{statusCategory(entry.status)}</span>
@@ -94,14 +116,17 @@ export function ChangesTab(): ReactElement {
         {!entry.insideWorkspace && <span style={{ color: palette.muted, flexShrink: 0, fontSize: 11 }}>{t('changes.outsideWorkspace')}</span>}
         <span style={{ flex: 1 }} />
         <button
-          onClick={() => { void (action === 'stage' ? operations.stage(entry.path) : operations.unstage(entry.path)) }}
-          disabled={busy}
-          aria-label={action === 'stage' ? t('changes.stage') + ' ' + entry.path : t('changes.unstage') + ' ' + entry.path}
+          onClick={() => {
+            if (action === 'discard') { setConfirming(entry); return }
+            void (action === 'stage' ? operations.stage(entry.path) : operations.unstage(entry.path))
+          }}
+          disabled={busy || discardBlocked}
+          aria-label={(destructive ? t('changes.discard') : action === 'stage' ? t('changes.stage') : t('changes.unstage')) + ' ' + entry.path}
           aria-busy={busy}
-          title={action === 'stage' ? t('changes.stage') : t('changes.unstage')}
-          style={{ background: 'transparent', border: '1px solid ' + palette.inputBorder, color: palette.text, borderRadius: 6, fontSize: 11, padding: '1px 8px', cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.6 : 1 }}
+          title={destructive ? t('changes.discard') : action === 'stage' ? t('changes.stage') : t('changes.unstage')}
+          style={{ background: 'transparent', border: '1px solid ' + (destructive ? '#f85149' : palette.inputBorder), color: destructive ? '#f85149' : palette.text, borderRadius: 6, fontSize: 11, padding: '1px 8px', cursor: busy || discardBlocked ? 'default' : 'pointer', opacity: busy || discardBlocked ? 0.6 : 1 }}
         >
-          {busy ? (pending === 'staging' ? t('changes.staging') : t('changes.unstaging')) : action === 'stage' ? t('changes.stage') : t('changes.unstage')}
+          {label}
         </button>
       </div>
     )
@@ -117,16 +142,18 @@ export function ChangesTab(): ReactElement {
   )
   const changeRow = (entry: GitChangeEntry, section: 'staged' | 'changes', key: number): ReactElement => {
     const actions = actionsFor(entry)
-    const action = section === 'staged' ? actions.staged : actions.changes
-    const warnDirty = section === 'changes' && action === 'stage' && stageDirtyWarning(entry, dirtyPaths)
+    const actionsForSection = section === 'staged' ? (actions.staged !== undefined ? [actions.staged] : []) : (actions.changes ?? [])
+    const warnDirty = section === 'changes' && actions.changes?.includes('stage') === true && stageDirtyWarning(entry, dirtyPaths)
+    const discardBlocked = section === 'changes' && discardBlockedReason(entry, dirtyPaths) !== undefined
     const error = ops.errors[entry.path]
     return (
       <div key={key}>
-        {action !== undefined
-          ? actionButton(entry, action, 0)
+        {actionsForSection.length > 0
+          ? actionsForSection.map((action, index) => actionButton(entry, action, index))
           : plainRow(entry, 0)}
         {warnDirty && <div style={{ color: '#d29922', fontSize: 11, padding: '0 0 2px 26px' }}>{t('changes.dirtyStageWarning')}</div>}
-        {error !== undefined && <div style={{ color: '#f85149', fontSize: 11, padding: '0 0 2px 26px' }} title={error.detail}>{t('changes.opFailed')}: {error.message}</div>}
+        {discardBlocked && <div style={{ color: '#d29922', fontSize: 11, padding: '0 0 2px 26px' }}>{t('changes.discardBlockedDirty')}</div>}
+        {error !== undefined && <div style={{ color: '#f85149', fontSize: 11, padding: '0 0 2px 26px' }} title={error.detail}>{errorText(t as (key: string) => string, error)}</div>}
       </div>
     )
   }
@@ -179,6 +206,24 @@ export function ChangesTab(): ReactElement {
           </div>
         )}
       </div>
+      {confirming !== undefined && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 1200, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.45)' }}>
+          <div role="dialog" aria-modal="true" aria-label={t('changes.discardTitle')} style={{ background: palette.dialog, border: '1px solid ' + palette.inputBorder, borderRadius: 10, padding: 16, width: 420, maxWidth: '90%', color: palette.text, fontFamily: 'system-ui' }}>
+            <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>{t('changes.discardTitle')}</div>
+            <div style={{ fontSize: 12.5, color: palette.muted, marginBottom: 8, wordBreak: 'break-all' }}>{confirming.path}</div>
+            <div style={{ fontSize: 12.5, marginBottom: 14 }}>{hasStagedSide(confirming) ? t('changes.discardConsequenceStaged') : t('changes.discardConsequence')}</div>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button onClick={() => { setConfirming(undefined) }} style={{ background: 'transparent', border: '1px solid ' + palette.inputBorder, color: palette.text, borderRadius: 6, padding: '5px 12px', fontSize: 12, cursor: 'pointer' }}>{t('changes.cancel')}</button>
+              <button
+                onClick={() => { const path = confirming.path; setConfirming(undefined); void operations.discard(path) }}
+                style={{ background: '#f85149', border: 'none', color: '#ffffff', borderRadius: 6, padding: '5px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+              >
+                {t('changes.discard')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
