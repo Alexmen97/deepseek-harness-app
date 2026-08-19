@@ -15,6 +15,7 @@
     "apps/desktop/src/inspector/editor-core.ts",
     "apps/desktop/src/inspector/filesync-core.ts",
     "apps/desktop/src/inspector/quick-open-core.ts",
+    "apps/desktop/src/inspector/highlight-core.ts",
     "apps/web/tests/scaffold.ts",
     "apps/web/tests/default-model.e2e.ts",
     "apps/web/tests/declared-reasoning.e2e.ts",
@@ -114,7 +115,9 @@
     "scripts/client-bundle-purity.spec.ts",
     // Client-bound specs: they drive bindings and the editor store, which
     // only typecheck under the desktop app build (apps/desktop/tsconfig.json).
-    "apps/desktop/tests/quit-guard.spec.ts"
+    "apps/desktop/tests/quit-guard.spec.ts",
+    "apps/desktop/tests/store-generation.spec.ts",
+    "apps/desktop/tests/filesync-wiring.spec.ts"
   ],
   "references": [
     { "path": "./vendor/cosmokit" },

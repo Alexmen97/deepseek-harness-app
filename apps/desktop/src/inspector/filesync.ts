@@ -8,7 +8,7 @@
 
 import { desktopBindings } from '@deepseek-ai/dsh-desktop-client'
 import { getInspectorState } from './store.ts'
-import { reconcileAllBuffers } from './editorStore.ts'
+import { getEditorState, reconcileAllBuffers, reconcileBuffer } from './editorStore.ts'
 import { createFilesyncScheduler } from './filesync-core.ts'
 import type { FilesyncScheduler } from './filesync-core.ts'
 
@@ -46,6 +46,18 @@ export function installFilesync(): void {
   })
   bindings.host.subscribeWorkspaceChanged((event) => {
     scheduler?.push(event.generation, event.paths, event.full === true)
+  })
+  // Live editor synchronization: every invalidation reconciles the open
+  // buffers whose path changed (all of them on a flood-cap batch).
+  listeners.add((paths) => {
+    const editor = getEditorState()
+    if (paths === undefined) {
+      void reconcileAllBuffers()
+      return
+    }
+    for (const path of editor.order) {
+      if (paths.includes(path)) void reconcileBuffer(path)
+    }
   })
 }
 

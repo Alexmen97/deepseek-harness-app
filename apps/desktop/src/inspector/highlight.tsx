@@ -1,14 +1,7 @@
 /** Conservative token highlighter: React text spans only, never HTML. */
 
 import type { ReactElement, ReactNode } from 'react'
-
-const TOKEN = new RegExp(
-  '(\/\/.*|#.*|\/\*[\s\S]*?\*\/'
-  + '|"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\''
-  + '|\b(?:const|let|var|function|return|if|else|for|while|import|export|from|class|interface|type|async|await|new|true|false|null|undefined)\b'
-  + '|\b\d+(?:\.\d+)?\b)',
-  'g',
-)
+import { TOKEN } from './highlight-core.ts'
 
 function color(token: string): string {
   if (token.startsWith('//') || token.startsWith('#') || token.startsWith('/*')) return '#6a737d'

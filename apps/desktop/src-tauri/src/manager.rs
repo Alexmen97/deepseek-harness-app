@@ -390,6 +390,7 @@ impl<H: DesktopHost> RuntimeManager<H> {
     /// in sync with dirty editor buffers.
     pub fn set_quit_guard(&self, armed: bool) {
         self.quit_guard.store(armed, Ordering::SeqCst);
+        self.host.emit_log(&format!("quit-guard: armed={armed}"));
     }
 
     /// Whether a quit attempt must pause for the frontend decision.
@@ -406,6 +407,7 @@ impl<H: DesktopHost> RuntimeManager<H> {
 
     /// Tell the frontend that a quit attempt is waiting on unsaved changes.
     pub fn emit_quit_guard_request(&self) {
+        self.host.emit_log("quit-guard: request emitted");
         self.host.emit_quit_guard(self.generation());
     }
 

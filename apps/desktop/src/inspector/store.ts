@@ -27,6 +27,8 @@ function applyFrame(frame: DesktopRuntimeFrame): void {
 }
 
 let installed = false
+/** Resolves once the runtimeStatus boot anchor has been applied. */
+let generationReady: Promise<void> | undefined
 /** Install the one frame subscription and lifecycle-reset hook. */
 export function installInspectorStore(): void {
   if (installed) return
@@ -40,6 +42,18 @@ export function installInspectorStore(): void {
       emit()
     }
   })
+  // Boot anchor: desktop.status only fires on transitions, so an install
+  // that lands after the last transition would otherwise keep sending
+  // generation -1 and every rpc would be rejected by the Rust manager.
+  generationReady = bindings.host.runtimeStatus().then((status) => {
+    if (currentGeneration < status.generation) {
+      currentGeneration = status.generation
+      if (status.generation !== state.generation) {
+        state = { generation: status.generation, plans: {}, jobs: {}, subagents: {}, terminals: {} }
+        emit()
+      }
+    }
+  }).catch(() => {})
 }
 
 export function useInspectorState(): InspectorState {
@@ -64,10 +78,13 @@ export function resetInspectorStoreForTest(): void {
   installed = false
   state = EMPTY_INSPECTOR
   currentGeneration = -1
+  generationReady = undefined
 }
 
 /** Send one terminal RPC over the runtime transport and return its result. */
 export async function terminalRequest<T>(method: string, params: unknown): Promise<T> {
+  installInspectorStore()
+  if (generationReady !== undefined) await generationReady
   const bindings = desktopBindings()
   return await bindings.transport.request({
     method,

@@ -19,6 +19,7 @@
     "targets": ["app"],
     "resources": {
       "resources/sidecar/dsh-desktop-runtime": "sidecar/dsh-desktop-runtime",
+      "resources/sidecar/dsh-desktop-runtime-spawn-helper": "sidecar/dsh-desktop-runtime-spawn-helper",
       "resources/runtime/cordis.yml": "runtime/cordis.yml"
     },
     "icon": ["icons/icon.icns"]

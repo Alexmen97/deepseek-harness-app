@@ -42,6 +42,11 @@ export function installQuitGuard(): void {
     emit()
     syncGuard()
   })
+  // Boot sync: a webview reload must not leave the native guard armed from
+  // a previous instance's dirty buffer (the Rust flag would then block quit
+  // with no dialog).
+  state = { ...state, dirtyPaths: dirtyBufferPaths() }
+  syncGuard()
   desktopBindings().host.subscribeQuitGuard(() => {
     state = { ...state, requested: true, saveFailed: false }
     emit()

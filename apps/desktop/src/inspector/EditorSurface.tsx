@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ReactElement } from 'react'
 import { EditorView, keymap, lineNumbers, highlightActiveLine } from '@codemirror/view'
-import { EditorState, Compartment } from '@codemirror/state'
+import { Annotation, EditorState, Compartment } from '@codemirror/state'
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands'
 import { syntaxHighlighting, defaultHighlightStyle } from '@codemirror/language'
 import { javascript } from '@codemirror/lang-javascript'
@@ -15,6 +15,9 @@ import { markdown } from '@codemirror/lang-markdown'
 import { rust } from '@codemirror/lang-rust'
 import { useDesktopStrings, desktopPalette, useDesktopAppearance, type DesktopStringKey } from '@deepseek-ai/dsh-desktop-client/src/ui/strings'
 import { useEditorState, setBufferContent, saveBuffer, saveAllBuffers, reloadBuffer, keepBufferChanges, closeBuffer, setActiveBuffer, setEditorVisible, type EditorBuffer } from './editorStore.ts'
+
+/** Marks programmatic document replaces so the update listener keeps the buffer clean. */
+const reloadAnnotation = Annotation.define<boolean>()
 
 /** Extension language by file extension; unknown files stay plain text. */
 function languageFor(path: string): ReturnType<typeof javascript> | null {
@@ -79,7 +82,11 @@ export function EditorSurface(): ReactElement {
           keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab, { key: 'Mod-s', run: save, preventDefault: true }]),
           EditorView.updateListener.of((update) => {
             if (update.docChanged && editor.activePath !== undefined) {
-              setBufferContent(editor.activePath, update.state.doc.toString())
+              // Reloads and adoptions carry the annotation; only real user
+              // edits mark the buffer dirty.
+              if (!update.transactions.some(transaction => transaction.annotation(reloadAnnotation))) {
+                setBufferContent(editor.activePath, update.state.doc.toString())
+              }
             }
           }),
         ],
@@ -97,7 +104,7 @@ export function EditorSurface(): ReactElement {
       // clean-file adoption replaces the document.
       const selection = view.state.selection.main
       const scrollTop = view.scrollDOM.scrollTop
-      view.dispatch({ changes: { from: 0, to: current.length, insert: active.content } })
+      view.dispatch({ changes: { from: 0, to: current.length, insert: active.content }, annotations: reloadAnnotation.of(true) })
       if (selection.from <= active.content.length || selection.to <= active.content.length) {
         view.dispatch({
           selection: {
