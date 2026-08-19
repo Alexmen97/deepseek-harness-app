@@ -460,6 +460,128 @@ pub fn git_status(app: tauri::AppHandle) -> Result<Value, String> {
     git_status_at(&root)
 }
 
+/// Structured read-only git status (porcelain v2 model) for the workspace.
+#[tauri::command]
+pub fn git_status_v2(app: tauri::AppHandle) -> Result<Value, String> {
+    let root = workspace_root(&app)?;
+    git_status_v2_at(&root)
+}
+
+/// Git status body over an explicit root for tests (M5C v2 model).
+///
+/// The workspace root is the resolution base; repository discovery is
+/// delegated to git itself (rev-parse --show-toplevel) and every path is
+/// returned exactly as git reports it, including paths outside the
+/// workspace when the workspace is a subdirectory of a larger repository.
+/// Callers that mutate paths must still validate each path through
+/// contained_path() against the workspace root (see the M5C security
+/// model); this read-only status never enumerates anything outside the
+/// repository the workspace belongs to.
+fn git_status_v2_at(root: &Path) -> Result<Value, String> {
+    let inside = Command::new("git")
+        .args(["-C", root.to_string_lossy().as_ref(), "rev-parse", "--is-inside-work-tree"])
+        .output();
+    match inside {
+        Err(_) => return Ok(json!({ "repository": false, "reason": "git-not-found" })),
+        Ok(output) if !output.status.success() => return Ok(json!({ "repository": false, "reason": "no-repository" })),
+        Ok(_) => {}
+    }
+    let porcelain = Command::new("git")
+        .args(["-C", root.to_string_lossy().as_ref(), "status", "--porcelain=v2", "-z"])
+        .output()
+        .map_err(|error| format!("git status failed: {error}"))?;
+    if !porcelain.status.success() {
+        return Err("git status failed".into());
+    }
+    let branch = Command::new("git")
+        .args(["-C", root.to_string_lossy().as_ref(), "rev-parse", "--abbrev-ref", "HEAD"])
+        .output()
+        .ok()
+        .filter(|output| output.status.success())
+        .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_string());
+    let text = String::from_utf8_lossy(&porcelain.stdout);
+    // Porcelain v2 records are NUL-terminated and never C-quoted (the -z
+    // contract), so a path is the remainder after the fixed header token
+    // count and may contain spaces verbatim. A rename/copy entry ('2')
+    // emits the original path as its own NUL-delimited chunk immediately
+    // after the record; the parse consumes it on the next iteration.
+    let mut files: Vec<Value> = Vec::new();
+    let mut pending_rename_original: Option<String> = None;
+    for entry in text.split('\0') {
+        if entry.is_empty() {
+            continue;
+        }
+        if let Some(original) = pending_rename_original.take() {
+            // Next chunk after a '2' record: the original path. A chunk
+            // that itself opens a new record is not consumed.
+            let looks_like_record = ["1 ", "2 ", "u ", "? "]
+                .iter()
+                .any(|prefix| entry.starts_with(prefix));
+            if looks_like_record {
+                pending_rename_original = Some(original);
+            } else if let Some(last) = files.last_mut() {
+                last["originalPath"] = json!(entry);
+            }
+            continue;
+        }
+        let record = entry
+            .strip_prefix("1 ")
+            .or_else(|| entry.strip_prefix("2 "))
+            .or_else(|| entry.strip_prefix("u "));
+        if let Some(rest) = record {
+            // 1 <XY> <sub> <mH> <mI> <mW> <hH> <hI> <path>
+            // 2 <XY> <sub> <mH> <mI> <mW> <hH> <hI> <X><score> <path>
+            // u <XY> <sub> <m1> <m2> <m3> <mW> <h1> <h2> <h3> <path>
+            let mut parts = rest.split_whitespace();
+            let Some(xy) = parts.next() else { continue };
+            let is_rename = entry.starts_with("2 ");
+            let is_conflict = entry.starts_with("u ");
+            // Consume the remaining header tokens: 6 more for '1'/'2'
+            // (sub, mH, mI, mW, hH, hI), 8 more for 'u' (sub, m1, m2, m3,
+            // mW, h1, h2, h3), then the rename score token for '2'.
+            let header_tokens = if is_conflict { 8 } else { 6 };
+            let mut consumed = 0;
+            while consumed < header_tokens {
+                match parts.next() {
+                    Some(_) => consumed += 1,
+                    None => break,
+                }
+            }
+            if consumed < header_tokens {
+                continue;
+            }
+            if is_rename {
+                parts.next(); // <X><score>
+            }
+            let path = parts.collect::<Vec<_>>().join(" ");
+            if path.is_empty() {
+                continue;
+            }
+            files.push(json!({
+                "path": path,
+                "status": xy,
+                "originalPath": "",
+                "conflicted": is_conflict,
+            }));
+            if is_rename {
+                pending_rename_original = Some(String::new());
+            }
+        } else if let Some(path) = entry.strip_prefix("? ") {
+            if !path.is_empty() {
+                files.push(json!({
+                    "path": path.to_string(),
+                    "status": "??",
+                    "originalPath": "",
+                    "conflicted": false,
+                }));
+            }
+        }
+    }
+    let dirty = !files.is_empty();
+    Ok(json!({ "repository": true, "branch": branch, "dirty": dirty, "changedFiles": files.len(), "files": files }))
+}
+
+
 /// Git status body over an explicit root for tests.
 fn git_status_at(root: &Path) -> Result<Value, String> {
     let inside = Command::new("git")
@@ -750,6 +872,146 @@ mod tests {
         assert!(result["diff"].as_str().unwrap().contains("-before"));
         assert!(result["diff"].as_str().unwrap().contains("+after"));
         assert_eq!(result["untracked"][0], "new.txt");
+    }
+
+    #[test]
+    fn git_status_v2_parses_staged_unstaged_renames_deletions_and_untracked() {
+        let root = fixture_root("git-status-v2");
+        let git = |args: &[&str]| {
+            Command::new("git")
+                .current_dir(&root)
+                .args(args)
+                .output()
+                .expect("git available")
+        };
+        assert!(git(&["init", "-q", "-b", "main"]).status.success());
+        assert!(git(&["config", "user.email", "m5c@example.test"]).status.success());
+        assert!(git(&["config", "user.name", "M5C Test"]).status.success());
+        fs::write(root.join("tracked.txt"), "one").unwrap();
+        fs::write(root.join("space name.txt"), "two").unwrap();
+        fs::write(root.join("to-rename.txt"), "three").unwrap();
+        assert!(git(&["add", "."]).status.success());
+        assert!(git(&["commit", "-q", "-m", "initial"]).status.success());
+
+        // staged then modified again: MM pair
+        fs::write(root.join("tracked.txt"), "one-staged").unwrap();
+        assert!(git(&["add", "tracked.txt"]).status.success());
+        fs::write(root.join("tracked.txt"), "one-staged-worktree").unwrap();
+        // staged rename with a space in the new name
+        assert!(git(&["mv", "to-rename.txt", "renamed name.txt"]).status.success());
+        // staged deletion of a file with a space
+        assert!(git(&["rm", "space name.txt"]).status.success());
+        fs::write(root.join("new.txt"), "new").unwrap();
+
+        let result = git_status_v2_at(&root).unwrap();
+        assert_eq!(result["repository"], true);
+        assert_eq!(result["branch"], "main");
+        assert_eq!(result["dirty"], true);
+        let files = result["files"].as_array().unwrap();
+        let by_path: std::collections::HashMap<&str, &Value> = files
+            .iter()
+            .map(|file| (file["path"].as_str().unwrap(), file))
+            .collect();
+        assert_eq!(by_path["tracked.txt"]["status"], "MM");
+        let rename = by_path["renamed name.txt"];
+        assert_eq!(rename["status"], "R.");
+        assert_eq!(rename["originalPath"], "to-rename.txt");
+        assert_eq!(by_path["space name.txt"]["status"], "D.");
+        assert_eq!(by_path["new.txt"]["status"], "??");
+    }
+
+    #[test]
+    fn git_status_v2_reports_conflict_entries() {
+        let root = fixture_root("git-status-v2-conflict");
+        let git = |args: &[&str]| {
+            Command::new("git")
+                .current_dir(&root)
+                .args(args)
+                .output()
+                .expect("git available")
+        };
+        assert!(git(&["init", "-q", "-b", "main"]).status.success());
+        assert!(git(&["config", "user.email", "m5c@example.test"]).status.success());
+        assert!(git(&["config", "user.name", "M5C Test"]).status.success());
+        fs::write(root.join("conflict.txt"), "base").unwrap();
+        assert!(git(&["add", "."]).status.success());
+        assert!(git(&["commit", "-q", "-m", "init"]).status.success());
+        assert!(git(&["checkout", "-q", "-b", "side"]).status.success());
+        fs::write(root.join("conflict.txt"), "side").unwrap();
+        assert!(git(&["commit", "-qam", "side"]).status.success());
+        assert!(git(&["checkout", "-q", "main"]).status.success());
+        fs::write(root.join("conflict.txt"), "main").unwrap();
+        assert!(git(&["commit", "-qam", "main"]).status.success());
+        let _ = git(&["merge", "side"]); // conflict leaves a u entry
+
+        let result = git_status_v2_at(&root).unwrap();
+        let files = result["files"].as_array().unwrap();
+        assert_eq!(files.len(), 1);
+        assert_eq!(files[0]["path"], "conflict.txt");
+        assert_eq!(files[0]["status"], "UU");
+        assert_eq!(files[0]["conflicted"], true);
+    }
+
+    #[test]
+    fn git_status_v2_reports_repo_root_relative_paths_from_a_subdirectory() {
+        let root = fixture_root("git-status-v2-subdir");
+        let git = |args: &[&str]| {
+            Command::new("git")
+                .current_dir(&root)
+                .args(args)
+                .output()
+                .expect("git available")
+        };
+        assert!(git(&["init", "-q", "-b", "main"]).status.success());
+        assert!(git(&["config", "user.email", "m5c@example.test"]).status.success());
+        assert!(git(&["config", "user.name", "M5C Test"]).status.success());
+        fs::create_dir_all(root.join("sub")).unwrap();
+        fs::write(root.join("sub/a.txt"), "one").unwrap();
+        assert!(git(&["add", "."]).status.success());
+        assert!(git(&["commit", "-q", "-m", "initial"]).status.success());
+        fs::write(root.join("sub/a.txt"), "two").unwrap();
+        fs::write(root.join("outside.txt"), "outside").unwrap();
+
+        let result = git_status_v2_at(&root.join("sub")).unwrap();
+        assert_eq!(result["repository"], true);
+        let files = result["files"].as_array().unwrap();
+        // porcelain v2 reports paths relative to the repository root even
+        // when run from a subdirectory; the mutation layer re-validates
+        // every path against the workspace root. Entry order is git's own.
+        let paths: std::collections::BTreeSet<&str> = files
+            .iter()
+            .map(|file| file["path"].as_str().unwrap())
+            .collect();
+        assert_eq!(paths.len(), 2);
+        assert!(paths.contains("outside.txt"));
+        assert!(paths.contains("sub/a.txt"));
+    }
+
+    #[test]
+    fn git_status_v2_handles_weird_filenames_and_non_git_workspaces() {
+        let root = fixture_root("git-status-v2-weird");
+        assert_eq!(git_status_v2_at(&root).unwrap()["repository"], false);
+        let git = |args: &[&str]| {
+            Command::new("git")
+                .current_dir(&root)
+                .args(args)
+                .output()
+                .expect("git available")
+        };
+        assert!(git(&["init", "-q", "-b", "main"]).status.success());
+        assert!(git(&["config", "user.email", "m5c@example.test"]).status.success());
+        assert!(git(&["config", "user.name", "M5C Test"]).status.success());
+        fs::write(root.join("dash-name.txt"), "x").unwrap();
+        fs::write(root.join("uni-èà.txt"), "y").unwrap();
+        assert!(git(&["add", "--", "dash-name.txt", "uni-èà.txt"]).status.success());
+        assert!(git(&["commit", "-q", "-m", "initial"]).status.success());
+        fs::write(root.join("dash-name.txt"), "changed").unwrap();
+
+        let result = git_status_v2_at(&root).unwrap();
+        let files = result["files"].as_array().unwrap();
+        assert_eq!(files.len(), 1);
+        assert_eq!(files[0]["path"], "dash-name.txt");
+        assert_eq!(files[0]["status"], ".M");
     }
 
     #[test]

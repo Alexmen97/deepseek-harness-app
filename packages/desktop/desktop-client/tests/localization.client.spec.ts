@@ -22,6 +22,7 @@ function fakeHost(): FakeHost {
     fsReadText: vi.fn(async () => ''),
     revealInPath: vi.fn(async () => {}),
     gitStatus: vi.fn(async () => ({ repository: false })),
+    gitStatusV2: vi.fn(async () => ({ repository: false })),
     gitDiff: vi.fn(async () => ({ repository: false })),
     openLogs: vi.fn(async () => {}),
     openExternal: vi.fn(async () => {}),

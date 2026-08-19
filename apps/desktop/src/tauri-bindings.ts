@@ -83,6 +83,7 @@ export function installTauriBindings(): void {
       revealInPath: async path => invoke('reveal_in_path', { path }),
       gitStatus: async () => invoke('git_status'),
       gitDiff: async () => invoke('git_diff'),
+      gitStatusV2: async () => invoke('git_status_v2'),
       openLogs: async () => invoke('open_logs'),
       openExternal: async url => invoke('open_external', { url }),
       prefsGet: async key => invoke<string | undefined>('prefs_get', { key }),

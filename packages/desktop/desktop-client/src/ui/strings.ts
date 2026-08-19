@@ -100,6 +100,10 @@ export type DesktopStringKey =
   | 'changes.removed'
   | 'changes.untracked'
   | 'changes.empty'
+  | 'changes.staged'
+  | 'changes.stagedEmpty'
+  | 'changes.changes'
+  | 'changes.conflicted'
   | 'terminal.noSession'
   | 'terminal.new'
   | 'terminal.close'
@@ -246,6 +250,10 @@ export const en: Record<DesktopStringKey, string> = {
   'changes.removed': 'Deletions',
   'changes.untracked': 'Untracked files',
   'changes.empty': 'No changes',
+  'changes.staged': 'Staged Changes',
+  'changes.stagedEmpty': 'Nothing staged',
+  'changes.changes': 'Changes',
+  'changes.conflicted': 'Conflicts',
   'terminal.noSession': 'Open a session to use the terminal',
   'terminal.new': 'New terminal',
   'terminal.close': 'Close terminal',
@@ -393,6 +401,10 @@ export const it: Record<DesktopStringKey, string> = {
   'changes.removed': 'Rimozioni',
   'changes.untracked': 'File non tracciati',
   'changes.empty': 'Nessuna modifica',
+  'changes.staged': 'Modifiche in stage',
+  'changes.stagedEmpty': 'Nessuna modifica in stage',
+  'changes.changes': 'Modifiche',
+  'changes.conflicted': 'Conflitti',
   'terminal.noSession': 'Apri una sessione per usare il terminale',
   'terminal.new': 'Nuovo terminale',
   'terminal.close': 'Chiudi terminale',
@@ -540,6 +552,10 @@ export const zh: Record<DesktopStringKey, string> = {
   'changes.removed': '删除',
   'changes.untracked': '未跟踪文件',
   'changes.empty': '没有更改',
+  'changes.staged': '暂存更改',
+  'changes.stagedEmpty': '没有暂存的更改',
+  'changes.changes': '更改',
+  'changes.conflicted': '冲突',
   'terminal.noSession': '打开一个会话以使用终端',
   'terminal.new': '新建终端',
   'terminal.close': '关闭终端',
@@ -686,6 +702,10 @@ export const es: Record<DesktopStringKey, string> = {
   'changes.removed': 'Eliminaciones',
   'changes.untracked': 'Archivos sin seguimiento',
   'changes.empty': 'Sin cambios',
+  'changes.staged': 'Cambios en preparación',
+  'changes.stagedEmpty': 'Nada en preparación',
+  'changes.changes': 'Cambios',
+  'changes.conflicted': 'Conflictos',
   'terminal.noSession': 'Abre una sesión para usar el terminal',
   'terminal.new': 'Nuevo terminal',
   'terminal.close': 'Cerrar terminal',
@@ -832,6 +852,10 @@ export const fr: Record<DesktopStringKey, string> = {
   'changes.removed': 'Suppressions',
   'changes.untracked': 'Fichiers non suivis',
   'changes.empty': 'Aucune modification',
+  'changes.staged': 'Modifications indexées',
+  'changes.stagedEmpty': 'Aucune modification indexée',
+  'changes.changes': 'Modifications',
+  'changes.conflicted': 'Conflits',
   'terminal.noSession': 'Ouvrez une session pour utiliser le terminal',
   'terminal.new': 'Nouveau terminal',
   'terminal.close': 'Fermer le terminal',
@@ -978,6 +1002,10 @@ export const de: Record<DesktopStringKey, string> = {
   'changes.removed': 'Entfernt',
   'changes.untracked': 'Nicht verfolgte Dateien',
   'changes.empty': 'Keine Änderungen',
+  'changes.staged': 'Gestaffelte Änderungen',
+  'changes.stagedEmpty': 'Keine gestaffelten Änderungen',
+  'changes.changes': 'Änderungen',
+  'changes.conflicted': 'Konflikte',
   'terminal.noSession': 'Öffnen Sie eine Sitzung, um das Terminal zu verwenden',
   'terminal.new': 'Neues Terminal',
   'terminal.close': 'Terminal schließen',
@@ -1124,6 +1152,10 @@ export const ptBr: Record<DesktopStringKey, string> = {
   'changes.removed': 'Remoções',
   'changes.untracked': 'Arquivos não rastreados',
   'changes.empty': 'Sem alterações',
+  'changes.staged': 'Alterações em stage',
+  'changes.stagedEmpty': 'Nada em stage',
+  'changes.changes': 'Alterações',
+  'changes.conflicted': 'Conflitos',
   'terminal.noSession': 'Abra uma sessão para usar o terminal',
   'terminal.new': 'Novo terminal',
   'terminal.close': 'Fechar terminal',

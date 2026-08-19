@@ -73,6 +73,7 @@ pub fn run() {
             commands::reveal_in_path,
             commands::git_status,
             commands::git_diff,
+            commands::git_status_v2,
             commands::diagnostics,
             commands::menu_set_language,
             commands::about_info,

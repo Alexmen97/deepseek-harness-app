@@ -31,6 +31,7 @@ function fakeTransport() {
         fsReadText: async () => '',
         revealInPath: async () => {},
         gitStatus: async () => ({ repository: false }),
+        gitStatusV2: async () => ({ repository: false }),
         gitDiff: async () => ({ repository: false }),
         openLogs: async () => {},
         openExternal: async () => {},

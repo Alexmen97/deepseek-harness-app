@@ -77,6 +77,9 @@ export interface DesktopHost {
   gitStatus(): Promise<DesktopGitStatus>
   /** Read-only unified diff plus untracked paths for the workspace. */
   gitDiff(): Promise<DesktopGitDiff>
+
+  /** Structured read-only git status (porcelain v2 model) for the workspace. */
+  gitStatusV2(): Promise<DesktopGitStatusV2>
   /** Reveal the runtime log files in the system viewer. */
   openLogs(): Promise<void>
   /** Open an external URL in the system browser. */
@@ -136,6 +139,25 @@ export interface DesktopGitDiff {
   reason?: 'git-not-found' | 'no-repository'
   diff?: string
   untracked?: string[]
+}
+
+/** One M5C porcelain-v2 status entry (rename entries carry the original path). */
+export interface DesktopGitStatusV2Entry {
+  path: string
+  originalPath?: string
+  status: string
+  /** True for porcelain v2 'u' (conflicted) entries; rendered read-only. */
+  conflicted?: boolean
+}
+
+/** Structured read-only git status result (M5C porcelain v2 model). */
+export interface DesktopGitStatusV2 {
+  repository: boolean
+  reason?: 'git-not-found' | 'no-repository'
+  branch?: string
+  dirty?: boolean
+  changedFiles?: number
+  files?: DesktopGitStatusV2Entry[]
 }
 
 /** The installed production/test bindings; apps/desktop installs the Tauri bindings before boot. */

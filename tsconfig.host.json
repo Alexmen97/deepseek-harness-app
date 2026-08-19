@@ -117,7 +117,8 @@
     // only typecheck under the desktop app build (apps/desktop/tsconfig.json).
     "apps/desktop/tests/quit-guard.spec.ts",
     "apps/desktop/tests/store-generation.spec.ts",
-    "apps/desktop/tests/filesync-wiring.spec.ts"
+    "apps/desktop/tests/filesync-wiring.spec.ts",
+    "apps/desktop/tests/git-model.spec.ts"
   ],
   "references": [
     { "path": "./vendor/cosmokit" },

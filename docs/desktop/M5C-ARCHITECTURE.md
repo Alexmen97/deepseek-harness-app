@@ -80,7 +80,7 @@ Frontend (Vitest): v2 model parsing (rename originalPath, conflict rows, untrack
 
 ## M5C implementation phases
 
-- M5C.1 — v2 status model host command + parser + Changes split, read-only.
+- M5C.1 — v2 status model host command + parser + Changes split, read-only. SHIPPED: see docs/desktop/M5C-TESTING.md.
 - M5C.2 — stage/unstage commands + UI (with the dirty-editor rules).
 - M5C.3 — discard (tracked only) + confirmations + dirty blocking.
 - M5C.4 — staged/unstaged diff selector + diff navigation.
