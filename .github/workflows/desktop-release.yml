@@ -109,7 +109,7 @@ jobs:
           KIND: ${{ steps.decide.outputs.kind }}
           SIGNED: ${{ needs.signing-secrets.outputs.signed }}
           NOTARIZED_CREDS: ${{ needs.signing-secrets.outputs.notarized }}
-          PREVIEW_VERSION: ${{ steps.meta.outputs.version }}
+          PREVIEW_VERSION: ${{ env.DESKTOP_PREVIEW_VERSION }}
         run: |
           if [ "$KIND" = "preview" ]; then
             echo "version=$PREVIEW_VERSION" >> "$GITHUB_OUTPUT"
