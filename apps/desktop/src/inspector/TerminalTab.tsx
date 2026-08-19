@@ -91,15 +91,36 @@ export function TerminalTab(): ReactElement {
     }
     let active = true
     setError(undefined)
-    void terminalRequest<{ terminalId: string; motd: string }>('desktop.terminal.spawn', { sessionId }).then((result) => {
-      if (!active) return
-      setSpawned({ terminalId: result.terminalId, exited: false })
-      termRef.current?.write(result.motd)
-      fitRef.current?.fit()
-    }, () => {
-      if (active) setError(t('terminal.spawnError'))
-    })
-    return () => { active = false }
+    // Bounded lifecycle: a previous terminal for this session is replaced,
+    // never accumulated — every re-run of this effect (tab switch, locale
+    // pin, session change) kills the old PTY before spawning a new one, and
+    // unmount kills the current one so no stale bash survives (M5B.2).
+    const spawn = (): void => {
+      void terminalRequest<{ terminalId: string; motd: string }>('desktop.terminal.spawn', { sessionId }).then((result) => {
+        if (!active) {
+          void terminalRequest('desktop.terminal.kill', { sessionId, terminalId: result.terminalId }).catch(() => {})
+          return
+        }
+        setSpawned({ terminalId: result.terminalId, exited: false })
+        termRef.current?.write(result.motd)
+        fitRef.current?.fit()
+      }, () => {
+        if (active) setError(t('terminal.spawnError'))
+      })
+    }
+    const previous = spawnedRef.current
+    if (previous !== undefined && !previous.exited) {
+      void terminalRequest('desktop.terminal.kill', { sessionId, terminalId: previous.terminalId }).then(spawn, spawn)
+    } else {
+      spawn()
+    }
+    return () => {
+      active = false
+      const current = spawnedRef.current
+      if (current !== undefined && !current.exited) {
+        void terminalRequest('desktop.terminal.kill', { sessionId, terminalId: current.terminalId }).catch(() => {})
+      }
+    }
   }, [sessionId, t])
 
   const output = sessionId !== undefined ? state.terminals[sessionId] : undefined

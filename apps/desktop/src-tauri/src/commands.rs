@@ -1,3 +1,17 @@
+/// Append one structured WebView error (window.onerror / unhandledrejection)
+/// to the same bounded desktop log, with the full stack for diagnosis.
+#[tauri::command]
+pub fn web_error(app: tauri::AppHandle, kind: String, message: String, stack: String) -> Result<(), String> {
+    use std::io::Write;
+    let dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|error| error.to_string())?
+        .join("logs");
+    let mut file = manager::open_log(&dir).map_err(|error| error.to_string())?;
+    writeln!(file, "[web:{kind}] {message}\n{stack}").map_err(|error| error.to_string())
+}
+
 /**
  * The minimal host surface the WebView may invoke. No generic exec, shell,
  * readFile, writeFile, or spawn primitive exists: agent command execution
@@ -83,6 +97,8 @@ pub fn log_line(app: tauri::AppHandle, line: String) -> Result<(), String> {
     let mut file = manager::open_log(&dir).map_err(|error| error.to_string())?;
     writeln!(file, "{line}").map_err(|error| error.to_string())
 }
+
+
 
 /// Native macOS directory picker; cancellation answers null, never an error.
 #[tauri::command]

@@ -276,7 +276,11 @@ export function apply(ctx: Context, config: JsonRpcConfig = {}): void {
       await transport.request('desktop/credential-delete', { ref })
     },
   }
-  ctx.provide('desktopCredentialBridge', bridge)
+  // Provide on the root context: sibling plugins (the credentials-keychain
+  // provider is a root-level sibling) resolve services through the root
+  // fiber's store, and a child-scoped provide would be invisible to them,
+  // throwing 'cannot get property desktopCredentialBridge without inject'.
+  ctx.root.provide('desktopCredentialBridge', bridge)
 
   let state: DesktopRuntimeState = 'initializing'
   let initialized: DesktopInitializeParams | undefined

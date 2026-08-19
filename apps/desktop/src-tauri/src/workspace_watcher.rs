@@ -324,8 +324,12 @@ mod tests {
         assert!(saw, "watcher must report the created file");
     }
 
+    static NEXT_WATCH_DIR: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+    /// Unique per call: parallel tests must never share one temp path.
     fn tempdir() -> PathBuf {
-        let base = std::env::temp_dir().join(format!("dsh-watch-test-{}", std::process::id()));
+        let seq = NEXT_WATCH_DIR.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        let base = std::env::temp_dir().join(format!("dsh-watch-test-{}-{seq}", std::process::id()));
         let _ = fs::remove_dir_all(&base);
         fs::create_dir_all(&base).unwrap();
         base

@@ -59,8 +59,11 @@ export function applyInspectorFrame(current: InspectorState, frame: InspectorFra
   const state = frame.generation !== current.generation
     ? { generation: frame.generation, plans: {}, jobs: {}, subagents: {}, terminals: {} }
     : current
-  const payload = frame.payload as Record<string, unknown> | undefined
-  if (payload === undefined || typeof payload !== 'object') return state
+  const payload = frame.payload as Record<string, unknown> | null | undefined
+  // A null payload (malformed or legacy frame) must be dropped, never crash
+  // on payload.type; property access on primitives is safe, so no extra
+  // typeof check is needed here.
+  if (payload === undefined || payload === null) return state
   if (isTerminalOutput(payload)) {
     const sessionId = payload.sessionId
     const previous = state.terminals[sessionId] ?? { terminalId: payload.terminalId, output: '', status: undefined }

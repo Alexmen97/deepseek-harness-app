@@ -40,3 +40,19 @@ describe('M4 inspector store projection', () => {
     expect(second.generation).toBe(4)
   })
 })
+
+describe('M5B.2 null-payload resilience', () => {
+  it('drops null payload frames instead of crashing on payload.type', () => {
+    expect(() => applyInspectorFrame(EMPTY_INSPECTOR, frame(3, null))).not.toThrow()
+    const state = applyInspectorFrame(EMPTY_INSPECTOR, frame(3, null))
+    // The generation is adopted; the null payload itself is dropped.
+    expect(state.generation).toBe(3)
+    expect(state.plans).toEqual({})
+    expect(state.terminals).toEqual({})
+  })
+
+  it('drops undefined and non-object payloads without throwing', () => {
+    expect(() => applyInspectorFrame(EMPTY_INSPECTOR, frame(3, undefined))).not.toThrow()
+    expect(() => applyInspectorFrame(EMPTY_INSPECTOR, frame(3, 'string'))).not.toThrow()
+  })
+})

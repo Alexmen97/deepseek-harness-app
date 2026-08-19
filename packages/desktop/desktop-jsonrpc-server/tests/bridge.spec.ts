@@ -50,6 +50,17 @@ describe('desktop credential bridge', () => {
     await removed
   })
 
+  it('is reachable from sibling plugin contexts (root provide)', async () => {
+    harness = await makeServerHarness({ keychain: true })
+    // The credentials-keychain provider mounts as a root-level sibling of
+    // this server; its resolution walks the root fiber's store, so the
+    // bridge must be provided on the root context, not only this ctx.
+    const siblingCtx = harness.ctx.root.extend()
+    const pending = siblingCtx.get('desktopCredentialBridge')!.resolve('DEEPSEEK_API_KEY')
+    await answerHostRequest('desktop/credential-resolve', { value: 'sk-sibling' }, undefined)
+    await expect(pending).resolves.toBe('sk-sibling')
+  })
+
   it('reports keychain false without the config flag', async () => {
     harness = await makeServerHarness()
     harness.request('desktop.initialize', { cwd: process.cwd() }, 'init')

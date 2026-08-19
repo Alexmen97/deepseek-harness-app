@@ -160,6 +160,8 @@ jobs:
           else
             pnpm exec tauri build
           fi
+      - name: Verify spawn helper in the app bundle
+        run: node scripts/check-desktop-spawn-helper.mjs "apps/desktop/src-tauri/target/release/bundle/macos/Harness Desktop.app"
       - name: Import signing certificate
         if: steps.decide.outputs.kind == 'production' && needs.signing-secrets.outputs.signed == 'true'
         env:

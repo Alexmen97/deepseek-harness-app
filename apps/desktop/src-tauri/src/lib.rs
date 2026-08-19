@@ -80,6 +80,7 @@ pub fn run() {
             commands::quit_guard_arm,
             commands::quit_now,
             commands::workspace_files,
+            commands::web_error,
         ])
         .build(tauri::generate_context!())
         .expect("error while building the desktop application")
@@ -90,13 +91,17 @@ pub fn run() {
                         if manager.quit_guard_armed() {
                             // Unsaved editor buffers: pause before any runtime
                             // teardown and let the frontend resolve the decision.
+                            manager.note("lifecycle: ExitRequested prevented (guard armed)");
                             api.prevent_exit();
                             manager.emit_quit_guard_request();
+                        } else {
+                            manager.note("lifecycle: ExitRequested passes (guard clear)");
                         }
                     }
                 }
                 tauri::RunEvent::Exit => {
                     if let Some(manager) = app.try_state::<RuntimeManager>() {
+                        manager.note("lifecycle: Exit reached, stopping runtime");
                         let _ = manager.stop();
                     }
                 }

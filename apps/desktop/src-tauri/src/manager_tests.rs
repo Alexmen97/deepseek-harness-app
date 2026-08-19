@@ -57,6 +57,7 @@ impl DesktopHost for FakeHost {
 
     fn emit_frame(&self, frame: &RuntimeFrame) {
         self.events.lock().unwrap().push(format!("frame:{}:{}", frame.generation, frame.rpc_id));
+        self.events.lock().unwrap().push(format!("payload:{}:{}", frame.generation, frame.payload));
     }
 
     fn emit_log(&self, line: &str) {
@@ -447,6 +448,7 @@ fn desktop_log_rotation_bounds_total_growth() {
 }
 #[test]
 fn quit_guard_arms_disarms_and_requests_exit() {
+    let _env = ENV_LOCK.lock().unwrap();
     let dir = TestDir::new("quit-guard");
     let (manager, host) = setup_manager(&dir, ECHO_SERVER, None, None);
     assert!(!manager.quit_guard_armed());
@@ -501,4 +503,50 @@ fn workspace_watcher_restarts_with_a_new_generation() {
         "the generation-2 watcher must report the created file"
     );
     manager.stop().unwrap();
+}
+#[test]
+fn quit_coordinator_defers_to_the_frontend_when_armed() {
+    let _env = ENV_LOCK.lock().unwrap();
+    let dir = TestDir::new("quit-coord-armed");
+    let (manager, host) = setup_manager(&dir, ECHO_SERVER, None, None);
+    manager.set_quit_guard(true);
+    manager.request_quit_flow();
+    assert!(host.has_event("quit-guard:0"), "armed quit must surface the dialog request");
+    assert!(!host.has_event("exit:0"), "no exit before the user decides");
+    assert!(manager.quit_guard_armed());
+    manager.request_quit();
+    assert!(host.has_event("exit:0"));
+}
+
+#[test]
+fn quit_coordinator_exits_immediately_when_clear() {
+    let _env = ENV_LOCK.lock().unwrap();
+    let dir = TestDir::new("quit-coord-clear");
+    let (manager, host) = setup_manager(&dir, ECHO_SERVER, None, None);
+    manager.request_quit_flow();
+    assert!(host.has_event("exit:0"), "clear guard exits through the normal path");
+    assert!(!host.has_event("quit-guard:0"));
+}
+#[test]
+fn route_frame_carries_terminal_output_payload_not_null() {
+    let _env = ENV_LOCK.lock().unwrap();
+    // The jsonrpc server emits desktop.terminal.output with the terminal
+    // object as the whole params; route_frame must forward it verbatim
+    // instead of reading params.payload (which is absent → null).
+    let dir = TestDir::new("route-terminal");
+    let (manager, host) = setup_manager(&dir, ECHO_SERVER, None, None);
+    let shared = manager.shared();
+    let manager2 = shared.clone();
+    let host2 = host.clone();
+    route_frame(
+        json!({ "jsonrpc": "2.0", "method": "desktop.terminal.output", "params": { "sessionId": "s-1", "terminalId": "t-1", "kind": "delta", "text": "hi" } }),
+        1,
+        &manager2,
+    );
+    let events = host2.events();
+    let payload_event = events.iter().find(|event| event.starts_with("payload:1:")).expect("terminal frame emitted");
+    assert!(payload_event.contains("t-1"), "payload must carry the terminal id: {payload_event}");
+    assert!(!payload_event.contains("null"), "payload must not be null: {payload_event}");
+    let _ = manager;
+    let _ = host;
 }

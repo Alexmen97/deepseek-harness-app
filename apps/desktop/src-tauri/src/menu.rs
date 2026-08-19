@@ -2,7 +2,7 @@
 //! macOS shortcuts, and menu:// events for the WebView-owned actions.
 
 use tauri::menu::{MenuBuilder, MenuItemBuilder, PredefinedMenuItem, SubmenuBuilder};
-use tauri::{AppHandle, Emitter, Runtime};
+use tauri::{AppHandle, Emitter, Manager, Runtime};
 
 pub const MENU_NEW_SESSION: &str = "menu://new-session";
 pub const MENU_OPEN_WORKSPACE: &str = "menu://open-workspace";
@@ -305,6 +305,14 @@ pub fn build_menu<R: Runtime>(app: &AppHandle<R>, language: &str) -> tauri::Resu
     let restart_item = MenuItemBuilder::with_id("restart-harness", labels.restart_harness).build(app)?;
     let logs_item = MenuItemBuilder::with_id("show-logs", labels.show_logs).build(app)?;
     let attach_item = MenuItemBuilder::with_id("attach-file", labels.attach_file).build(app)?;
+    // Custom Quit with the Cmd+Q accelerator: the predefined quit item calls
+    // NSApp terminate:, which exits through tao LoopDestroyed → RunEvent::Exit
+    // and never reaches RunEvent::ExitRequested where the unsaved-changes
+    // guard lives. The custom item routes both Cmd+Q and the menu selection
+    // through the manager's quit coordinator instead.
+    let quit_item = MenuItemBuilder::with_id("quit", labels.quit)
+        .accelerator("CmdOrCtrl+Q")
+        .build(app)?;
     let repository_item = MenuItemBuilder::with_id("repository", labels.repository).build(app)?;
     let licenses_item = MenuItemBuilder::with_id("licenses", labels.licenses).build(app)?;
 
@@ -317,7 +325,7 @@ pub fn build_menu<R: Runtime>(app: &AppHandle<R>, language: &str) -> tauri::Resu
         .item(&PredefinedMenuItem::hide_others(app, Some(labels.hide_others))?)
         .item(&PredefinedMenuItem::show_all(app, Some(labels.show_all))?)
         .separator()
-        .item(&PredefinedMenuItem::quit(app, Some(labels.quit))?)
+        .item(&quit_item)
         .build()?;
     let file_menu = SubmenuBuilder::new(app, labels.file)
         .item(&new_session_item)
@@ -368,6 +376,13 @@ pub fn handle_menu_event<R: Runtime>(app: &AppHandle<R>, id: &str) {
         "restart-harness" => { let _ = app.emit(MENU_RESTART_HARNESS, ()); }
         "show-logs" => { let _ = app.emit(MENU_SHOW_LOGS, ()); }
         "attach-file" => { let _ = app.emit(MENU_ATTACH_FILE, ()); }
+        "quit" => {
+            // Cmd+Q and the app-menu Quit land here; the coordinator decides
+            // between the unsaved-changes dialog and an immediate clean exit.
+            if let Some(manager) = app.try_state::<crate::manager::RuntimeManager>() {
+                manager.request_quit_flow();
+            }
+        }
         "about" => { let _ = crate::commands::open_about_window(app.clone()); }
         "repository" => { let _ = crate::commands::open_in_system(DEEPSEEK_HARNESS_REPOSITORY); }
         "licenses" => { let _ = crate::commands::open_in_system(DEEPSEEK_HARNESS_LICENSES); }

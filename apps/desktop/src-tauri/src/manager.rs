@@ -411,6 +411,25 @@ impl<H: DesktopHost> RuntimeManager<H> {
         self.host.emit_quit_guard(self.generation());
     }
 
+    /// Unified quit coordinator: the single decision point for every quit
+    /// request (menu Quit, Cmd+Q, window close). Dirty buffers pause the
+    /// exit for the frontend decision; otherwise the app exits through the
+    /// normal ExitRequested → Exit path, which stops the runtime (no orphan).
+    pub fn request_quit_flow(&self) {
+        if self.quit_guard_armed() {
+            self.host.emit_log("quit-coordinator: guard armed, deferring to the frontend");
+            self.emit_quit_guard_request();
+        } else {
+            self.host.emit_log("quit-coordinator: guard clear, exiting");
+            self.request_quit();
+        }
+    }
+
+    /// Emit one structured lifecycle log line through the host.
+    pub fn note(&self, line: &str) {
+        self.host.emit_log(line);
+    }
+
     /// Start the generation-scoped native workspace watcher. Non-fatal on
     /// failure: live sync degrades to manual refresh.
     fn start_watcher(&self, generation: u64, workspace: &Path) {
@@ -614,6 +633,7 @@ fn route_frame<H: DesktopHost>(value: Value, generation: u64, manager: &SharedMa
     match (id, method) {
         (Some(id), Some(method)) => {
             // Server-initiated request: only the credential bridge is served.
+            manager.host.emit_log(&format!("credential-bridge: request {method}"));
             let response = match method.as_str() {
                 "desktop/credential-resolve" => {
                     let reference = value.pointer("/params/ref").and_then(Value::as_str).unwrap_or("");
@@ -658,11 +678,21 @@ fn route_frame<H: DesktopHost>(value: Value, generation: u64, manager: &SharedMa
                 .and_then(Value::as_str)
                 .unwrap_or("")
                 .to_string();
-            let payload = value
-                .get("params")
-                .and_then(|params| params.get("payload"))
-                .cloned()
-                .unwrap_or(Value::Null);
+            // Terminal notifications carry their payload directly in params
+            // (the jsonrpc server emits desktop.terminal.* with the terminal
+            // object as the whole params); apiproxy streams (events.mux,
+            // events.host) nest it under params.payload. Reading only
+            // params.payload would turn every terminal delta into a null
+            // frame and crash the frontend reducer on payload.type.
+            let payload = if method.starts_with("desktop.terminal.") {
+                value.get("params").cloned().unwrap_or(Value::Null)
+            } else {
+                value
+                    .get("params")
+                    .and_then(|params| params.get("payload"))
+                    .cloned()
+                    .unwrap_or(Value::Null)
+            };
             if method == "desktop.status" {
                 let state = value
                     .get("params")
