@@ -17,6 +17,11 @@ export function TerminalTab(): ReactElement {
   const { t } = useDesktopStrings()
   const palette = desktopPalette(useDesktopAppearance())
   const state = useInspectorState()
+  // `t` is a fresh arrow per render; the spawn effect must not re-run on
+  // every locale/state render or each re-run would kill+respawn the PTY and
+  // briefly accumulate bash children (M5C.5 PTY-leak fix).
+  const tRef = useRef(t)
+  tRef.current = t
   const containerRef = useRef<HTMLDivElement>(null)
   const termRef = useRef<Terminal | undefined>(undefined)
   const fitRef = useRef<FitAddon | undefined>(undefined)
@@ -83,45 +88,57 @@ export function TerminalTab(): ReactElement {
     }
   }, [palette, sessionId, spawned])
 
+  // Serialized PTY lifecycle: one in-flight kill+spawn chain per mount.
+  // A concurrent re-run (sessionId flapping, remount) waits for the previous
+  // chain instead of spawning in parallel, so the runtime never accumulates
+  // more than one bash per tab (M5C.5 PTY-leak fix).
+  // One live PTY per mount: the latest effect run wins and cancels earlier
+  // runs before they can spawn. `spawnRunRef` is bumped on every re-run so a
+  // stale async chain (sessionId flapping, remount) never spawns after a
+  // newer chain claimed the slot. `ownedTerminalRef` tracks the terminal the
+  // current run has spawned even before the async setState lands, so a newer
+  // run always kills the previous PTY before spawning (M5C.5 PTY-leak fix).
+  const spawnRunRef = useRef(0)
+  const ownedTerminalRef = useRef<SpawnedTerminal | undefined>(undefined)
+
   useEffect(() => {
     if (sessionId === undefined) {
       setSpawned(undefined)
       setError(undefined)
       return
     }
-    let active = true
+    const run = ++spawnRunRef.current
+    const disposed = { value: false }
     setError(undefined)
-    // Bounded lifecycle: a previous terminal for this session is replaced,
-    // never accumulated — every re-run of this effect (tab switch, locale
-    // pin, session change) kills the old PTY before spawning a new one, and
-    // unmount kills the current one so no stale bash survives (M5B.2).
-    const spawn = (): void => {
-      void terminalRequest<{ terminalId: string; motd: string }>('desktop.terminal.spawn', { sessionId }).then((result) => {
-        if (!active) {
-          void terminalRequest('desktop.terminal.kill', { sessionId, terminalId: result.terminalId }).catch(() => {})
-          return
-        }
-        setSpawned({ terminalId: result.terminalId, exited: false })
-        termRef.current?.write(result.motd)
-        fitRef.current?.fit()
-      }, () => {
-        if (active) setError(t('terminal.spawnError'))
-      })
-    }
-    const previous = spawnedRef.current
-    if (previous !== undefined && !previous.exited) {
-      void terminalRequest('desktop.terminal.kill', { sessionId, terminalId: previous.terminalId }).then(spawn, spawn)
-    } else {
-      spawn()
-    }
+    const previous = ownedTerminalRef.current
+    ownedTerminalRef.current = undefined
+    void (async (): Promise<void> => {
+      if (previous !== undefined && !previous.exited) {
+        await terminalRequest('desktop.terminal.kill', { sessionId, terminalId: previous.terminalId }).catch(() => {})
+      }
+      if (disposed.value || run !== spawnRunRef.current) return
+      const result = await terminalRequest<{ terminalId: string; motd: string }>('desktop.terminal.spawn', { sessionId })
+      if (run !== spawnRunRef.current) {
+        // A newer effect run claimed the slot: never leave its PTY behind.
+        await terminalRequest('desktop.terminal.kill', { sessionId, terminalId: result.terminalId }).catch(() => {})
+        return
+      }
+      ownedTerminalRef.current = { terminalId: result.terminalId, exited: false }
+      spawnedRef.current = ownedTerminalRef.current
+      setSpawned(ownedTerminalRef.current)
+      termRef.current?.write(result.motd)
+      fitRef.current?.fit()
+    })().catch(() => {
+      if (!disposed.value && run === spawnRunRef.current) setError(tRef.current('terminal.spawnError'))
+    })
     return () => {
-      active = false
-      const current = spawnedRef.current
+      disposed.value = true
+      const current = ownedTerminalRef.current ?? spawnedRef.current
       if (current !== undefined && !current.exited) {
         void terminalRequest('desktop.terminal.kill', { sessionId, terminalId: current.terminalId }).catch(() => {})
       }
     }
-  }, [sessionId, t])
+  }, [sessionId])
 
   const output = sessionId !== undefined ? state.terminals[sessionId] : undefined
   const lastLength = useRef(0)
