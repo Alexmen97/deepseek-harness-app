@@ -6,7 +6,8 @@
  * bundle resources even in dev profile. Both need real files on disk:
  *   - apps/desktop/src-tauri/icons/icon.png  (generated, gitignored)
  *   - apps/desktop/src-tauri/icons/icon.icns (committed)
- *   - resources/sidecar/dsh-desktop-runtime  (placeholder for tests)
+ *   - resources/sidecar/dsh-desktop-runtime (placeholder for tests)
+ *   - resources/sidecar/dsh-desktop-runtime-spawn-helper (placeholder for tests)
  *   - resources/runtime/cordis.yml           (tracked runtime config copy)
  * The tauri build's beforeBuildCommand stages the real SEA; the dev-profile
  * unit tests only need tauri-build's existence checks, so the placeholder
@@ -31,9 +32,11 @@ if (!existsSync(resolve(tauri, 'icons/icon.icns'))) {
 
 mkdirSync(resolve(tauri, 'resources/sidecar'), { recursive: true })
 mkdirSync(resolve(tauri, 'resources/runtime'), { recursive: true })
-const sidecar = resolve(tauri, 'resources/sidecar/dsh-desktop-runtime')
-if (!existsSync(sidecar)) {
-  writeFileSync(sidecar, '')
+for (const name of ['dsh-desktop-runtime', 'dsh-desktop-runtime-spawn-helper']) {
+  const sidecar = resolve(tauri, 'resources/sidecar/' + name)
+  if (!existsSync(sidecar)) {
+    writeFileSync(sidecar, '')
+  }
 }
 copyFileSync(
   resolve(repo, 'packages/desktop/desktop-runtime/runtime/cordis.yml'),

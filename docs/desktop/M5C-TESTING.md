@@ -40,3 +40,7 @@ M5C.1 is read-only (no stage/unstage/discard actions yet): the interactive pass 
 ### Manual QA record
 
 The interactive pass of the full flow list (M5C.2 items 1-22 in the milestone brief) is scheduled for M5C.5 on a disposable git fixture. The mutation semantics (stage/unstage round trips, containment, dirty-buffer warning, per-file pending/error states) are pinned by the automated suites above.
+
+## CI fix (M5C.2)
+
+- `scripts/prepare-desktop-rust-tests.mjs` now stages the `dsh-desktop-runtime-spawn-helper` placeholder alongside the runtime placeholder, closing the CI Desktop failure (M5B.2/M5C.1) where tauri.conf.json declared the spawn-helper bundle resource but the deterministic staging script did not create it; `check-desktop-rust-resources.mjs` now passes in a clean checkout.
