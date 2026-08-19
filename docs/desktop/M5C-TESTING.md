@@ -62,6 +62,8 @@ The interactive pass of the full flow list (M5C.2 items 1-22 in the milestone br
 
 ### Manual QA record
 
+The interactive QA record lives in docs/desktop/M5C-MANUAL-QA.md.
+
 The interactive discard flows (tracked modified, staged+unstaged, dirty block, deleted restore, cancel/confirm, dash file, subdir containment, no crash, Cmd+Q, no orphan) are scheduled for M5C.5 on a disposable fixture; the semantics are pinned by the automated suites above (honest label: automated only).
 
 ## M5C.4 - advanced staged/unstaged diff UX
