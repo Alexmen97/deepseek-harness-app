@@ -80,6 +80,10 @@ export interface DesktopHost {
 
   /** Structured read-only git status (porcelain v2 model) for the workspace. */
   gitStatusV2(): Promise<DesktopGitStatusV2>
+  /** Stage one workspace file (git add -A -- <path>); rejects with DesktopGitError. */
+  gitStageFile(path: string): Promise<void>
+  /** Unstage one workspace file (git restore --staged / rm --cached); rejects with DesktopGitError. */
+  gitUnstageFile(path: string): Promise<void>
   /** Reveal the runtime log files in the system viewer. */
   openLogs(): Promise<void>
   /** Open an external URL in the system browser. */
@@ -158,6 +162,19 @@ export interface DesktopGitStatusV2 {
   dirty?: boolean
   changedFiles?: number
   files?: DesktopGitStatusV2Entry[]
+  /** Workspace path relative to the repository root ('' when equal); porcelain paths are repo-root-relative. */
+  workspacePrefix?: string
+}
+
+/** Typed error from the M5C.2 git mutation commands; the frontend never parses raw git stderr. */
+export interface DesktopGitError {
+  /**
+   * Stable category: GIT_NOT_FOUND, NOT_GIT_REPOSITORY, PATH_OUTSIDE_WORKSPACE,
+   * PATH_NOT_FOUND, UNSUPPORTED_GIT_STATE, GIT_OPERATION_FAILED, WORKSPACE_UNAVAILABLE.
+   */
+  code: string
+  message: string
+  detail?: string
 }
 
 /** The installed production/test bindings; apps/desktop installs the Tauri bindings before boot. */

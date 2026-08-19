@@ -22,6 +22,8 @@ function fakeHost(): FakeHost {
     fsReadText: vi.fn(async () => ''),
     revealInPath: vi.fn(async () => {}),
     gitStatus: vi.fn(async () => ({ repository: false })),
+    gitStageFile: vi.fn(async () => {}),
+    gitUnstageFile: vi.fn(async () => {}),
     gitStatusV2: vi.fn(async () => ({ repository: false })),
     gitDiff: vi.fn(async () => ({ repository: false })),
     openLogs: vi.fn(async () => {}),

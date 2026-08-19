@@ -8,6 +8,7 @@ import { isPermissionGranted, requestPermission, sendNotification } from '@tauri
 import {
   installDesktopBindings,
   type DesktopBindings,
+  type DesktopGitError,
   type DesktopRuntimeFrame,
   type DesktopRuntimeLifecycle,
 } from '@deepseek-ai/dsh-desktop-client'
@@ -20,6 +21,35 @@ async function ensureNotificationPermission(): Promise<boolean> {
   } catch {
     return false
   }
+}
+
+/** Normalize a rejected Tauri invoke into the typed git error contract. */
+function parseGitError(error: unknown): DesktopGitError & Error {
+  if (typeof error === 'object' && error !== null && 'code' in error) {
+    const err = new Error((error as { message?: string }).message ?? 'the git operation failed') as DesktopGitError & Error
+    err.code = (error as { code: string }).code
+    const detail = (error as { detail?: string }).detail
+    if (detail !== undefined) err.detail = detail
+    return err
+  }
+  const message = error instanceof Error ? error.message : String(error)
+  const trimmed = message.trim()
+  if (trimmed.startsWith('{')) {
+    try {
+      const parsed = JSON.parse(trimmed) as Partial<DesktopGitError>
+      if (typeof parsed.code === 'string' && typeof parsed.message === 'string') {
+        const err = new Error(parsed.message) as DesktopGitError & Error
+        err.code = parsed.code
+        if (parsed.detail !== undefined) err.detail = parsed.detail
+        return err
+      }
+    } catch {
+      // fall through to the generic category
+    }
+  }
+  const err = new Error(trimmed !== '' ? trimmed : 'the git operation failed') as DesktopGitError & Error
+  err.code = 'GIT_OPERATION_FAILED'
+  return err
 }
 
 /** Parse the Rust multiline summary into a stable key/value record. */
@@ -84,6 +114,20 @@ export function installTauriBindings(): void {
       gitStatus: async () => invoke('git_status'),
       gitDiff: async () => invoke('git_diff'),
       gitStatusV2: async () => invoke('git_status_v2'),
+      gitStageFile: async (path) => {
+        try {
+          await invoke('git_stage_file', { path })
+        } catch (error) {
+          throw parseGitError(error)
+        }
+      },
+      gitUnstageFile: async (path) => {
+        try {
+          await invoke('git_unstage_file', { path })
+        } catch (error) {
+          throw parseGitError(error)
+        }
+      },
       openLogs: async () => invoke('open_logs'),
       openExternal: async url => invoke('open_external', { url }),
       prefsGet: async key => invoke<string | undefined>('prefs_get', { key }),

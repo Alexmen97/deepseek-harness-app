@@ -118,7 +118,8 @@
     "apps/desktop/tests/quit-guard.spec.ts",
     "apps/desktop/tests/store-generation.spec.ts",
     "apps/desktop/tests/filesync-wiring.spec.ts",
-    "apps/desktop/tests/git-model.spec.ts"
+    "apps/desktop/tests/git-model.spec.ts",
+    "apps/desktop/tests/changes-core.spec.ts"
   ],
   "references": [
     { "path": "./vendor/cosmokit" },

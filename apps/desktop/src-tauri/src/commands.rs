@@ -578,7 +578,276 @@ fn git_status_v2_at(root: &Path) -> Result<Value, String> {
         }
     }
     let dirty = !files.is_empty();
-    Ok(json!({ "repository": true, "branch": branch, "dirty": dirty, "changedFiles": files.len(), "files": files }))
+    // The workspace-relative prefix inside the repository root: porcelain
+    // v2 reports paths relative to the repository root, while the desktop
+    // UI may only mutate paths inside the selected workspace. The frontend
+    // strips this prefix to derive the workspace-visible path of each row.
+    let canonical_root = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
+    let workspace_prefix = match repo_root_for(root) {
+        Ok(repo) => canonical_root
+            .strip_prefix(&repo)
+            .map(|suffix| suffix.components().map(|c| c.as_os_str().to_string_lossy()).collect::<Vec<_>>().join("/"))
+            .unwrap_or_default(),
+        Err(_) => String::new(),
+    };
+    Ok(json!({ "repository": true, "branch": branch, "dirty": dirty, "changedFiles": files.len(), "files": files, "workspacePrefix": workspace_prefix }))
+}
+
+
+/// Typed error for the M5C.2 git mutation commands. The `code` is a stable
+/// category the frontend renders without parsing raw git stderr; `detail`
+/// carries sanitized technical output only.
+#[derive(Debug, serde::Serialize)]
+pub struct GitError {
+    pub code: &'static str,
+    pub message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
+}
+
+impl GitError {
+    fn new(code: &'static str, message: impl Into<String>) -> Self {
+        GitError { code, message: message.into(), detail: None }
+    }
+
+    fn with_detail(code: &'static str, message: impl Into<String>, detail: impl Into<String>) -> Self {
+        GitError { code, message: message.into(), detail: Some(detail.into()) }
+    }
+
+    fn git_not_found() -> Self {
+        GitError::new("GIT_NOT_FOUND", "git is not available on this system")
+    }
+
+    fn not_git() -> Self {
+        GitError::new("NOT_GIT_REPOSITORY", "the workspace is not inside a git repository")
+    }
+
+    fn outside_workspace() -> Self {
+        GitError::new("PATH_OUTSIDE_WORKSPACE", "the path is outside the selected workspace")
+    }
+
+    fn path_unavailable() -> Self {
+        GitError::new("PATH_NOT_FOUND", "the path is not available in the workspace")
+    }
+
+    fn unsupported_state() -> Self {
+        GitError::new("UNSUPPORTED_GIT_STATE", "git does not allow this operation in the current state")
+    }
+
+    fn operation_failed(stderr: &[u8]) -> Self {
+        let raw = String::from_utf8_lossy(stderr);
+        let detail: String = raw.trim().chars().take(500).collect();
+        GitError::with_detail(
+            "GIT_OPERATION_FAILED",
+            "the git operation failed",
+            if detail.is_empty() { "git exited with an error".to_string() } else { detail },
+        )
+    }
+
+    fn workspace(message: String) -> Self {
+        GitError::new("WORKSPACE_UNAVAILABLE", message)
+    }
+}
+
+/// One fixed-argv git invocation from the workspace root; never a shell.
+fn git_run(root: &Path, args: &[&str]) -> Result<std::process::Output, GitError> {
+    Command::new("git")
+        .args(["-C", root.to_string_lossy().as_ref()])
+        .args(args)
+        .output()
+        .map_err(|_| GitError::git_not_found())
+}
+
+/// The canonical repository root above (or equal to) the workspace root.
+fn repo_root_for(workspace: &Path) -> Result<PathBuf, GitError> {
+    let output = git_run(workspace, &["rev-parse", "--show-toplevel"])?;
+    if !output.status.success() {
+        return Err(GitError::not_git());
+    }
+    let raw = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if raw.is_empty() {
+        return Err(GitError::not_git());
+    }
+    PathBuf::from(raw).canonicalize().map_err(|error| GitError::new("PATH_NOT_FOUND", format!("cannot resolve the repository root: {error}")))
+}
+
+/// Canonical containment for git mutation paths.
+///
+/// `contained_path` requires the target to exist (it canonicalizes the full
+/// path), but git mutations legitimately target files that do not exist on
+/// disk (staging a deletion). This variant canonicalizes the longest
+/// existing prefix, verifies it stays inside the workspace root, and then
+/// re-appends the missing tail with plain components. The same input rules
+/// apply: no absolute paths, no parent escapes, no backslashes/colons, and
+/// a symlink resolving outside the root is rejected by the prefix check.
+fn contained_git_path(root: &Path, rel: &str) -> Result<PathBuf, GitError> {
+    let root = root.canonicalize().map_err(|error| GitError::new("PATH_NOT_FOUND", format!("workspace resolve failed: {error}")))?;
+    if rel.is_empty() {
+        return Ok(root);
+    }
+    if rel.starts_with('/') || rel.contains('\\') || rel.contains(':') {
+        return Err(GitError::outside_workspace());
+    }
+    let mut composed = root.clone();
+    for component in Path::new(rel).components() {
+        match component {
+            Component::Normal(part) => composed.push(part),
+            Component::CurDir => {}
+            Component::ParentDir | Component::RootDir | Component::Prefix(_) => {
+                return Err(GitError::outside_workspace());
+            }
+        }
+    }
+    // Canonicalize the longest existing prefix, collecting the missing tail.
+    let mut tail: Vec<std::ffi::OsString> = Vec::new();
+    let mut current: &Path = composed.as_path();
+    let probe = loop {
+        match current.canonicalize() {
+            Ok(canonical) => break canonical,
+            Err(_) => {
+                let Some(name) = current.file_name() else {
+                    return Err(GitError::path_unavailable());
+                };
+                tail.push(name.to_os_string());
+                let Some(parent) = current.parent() else {
+                    return Err(GitError::path_unavailable());
+                };
+                current = parent;
+            }
+        }
+    };
+    if !probe.starts_with(&root) {
+        return Err(GitError::outside_workspace());
+    }
+    let mut resolved = probe;
+    for name in tail.iter().rev() {
+        resolved.push(name);
+    }
+    Ok(resolved)
+}
+
+/// Whether the porcelain v2 status currently reports the path as conflicted.
+/// Guard for the mutation commands: `git add` on a conflicted path would
+/// stage a resolution, which M5C.2 deliberately never does.
+fn is_conflicted(workspace: &Path, repo_rel: &str) -> Result<bool, GitError> {
+    let output = git_run(workspace, &["status", "--porcelain=v2", "-z"])?;
+    if !output.status.success() {
+        return Err(GitError::operation_failed(&output.stderr));
+    }
+    let target_str = repo_rel;
+    for entry in String::from_utf8_lossy(&output.stdout).split('\0') {
+        if let Some(rest) = entry.strip_prefix("u ") {
+            let mut parts = rest.split_whitespace();
+            let _xy = parts.next();
+            let mut consumed = 0;
+            while consumed < 8 {
+                match parts.next() {
+                    Some(_) => consumed += 1,
+                    None => break,
+                }
+            }
+            let path = parts.collect::<Vec<_>>().join(" ");
+            if path == target_str {
+                return Ok(true);
+            }
+        }
+    }
+    Ok(false)
+}
+
+/// Stage one workspace-relative path: `git add -A -- <path>`.
+///
+/// `-A` is required so a deleted worktree file stages its deletion (`git
+/// add -- <path>` refuses a missing path); for every other state it is
+/// identical to `git add -- <path>`. The argv stays fixed, the `--` is
+/// mandatory, and the path is the canonical absolute target after
+/// containment validation.
+/// Convert one repository-relative path (the porcelain v2 model) to the
+/// workspace-visible relative path. Paths outside the selected workspace
+/// are rejected before any containment check: the desktop UI may only
+/// mutate paths inside the workspace, even when the repository root is
+/// above it. This is the single conversion layer for git mutation paths.
+fn workspace_rel_for(workspace: &Path, repo_rel: &str) -> Result<String, GitError> {
+    // Both sides must be canonical: git's --show-toplevel resolves symlinks
+    // (e.g. /var -> /private/var on macOS), so the workspace must match.
+    let workspace = workspace
+        .canonicalize()
+        .map_err(|error| GitError::new("PATH_NOT_FOUND", format!("workspace resolve failed: {error}")))?;
+    let repo = repo_root_for(&workspace)?;
+    let prefix = workspace
+        .strip_prefix(&repo)
+        .map(|suffix| suffix.components().map(|c| c.as_os_str().to_string_lossy()).collect::<Vec<_>>().join("/"))
+        .unwrap_or_default();
+    if prefix.is_empty() {
+        return Ok(repo_rel.to_string());
+    }
+    let with_sep = format!("{prefix}/");
+    if let Some(rest) = repo_rel.strip_prefix(&with_sep) {
+        if !rest.is_empty() {
+            return Ok(rest.to_string());
+        }
+    }
+    Err(GitError::outside_workspace())
+}
+
+fn git_stage_at(workspace: &Path, repo_rel: &str) -> Result<(), GitError> {
+    if is_conflicted(workspace, repo_rel)? {
+        return Err(GitError::unsupported_state());
+    }
+    let rel = workspace_rel_for(workspace, repo_rel)?;
+    // Canonical containment validation only: git resolves the pathspec
+    // against the working directory (-C workspace), so the argv carries
+    // the workspace-relative path, never an absolute one.
+    contained_git_path(workspace, &rel)?;
+    let output = git_run(workspace, &["add", "-A", "--", rel.as_str()])?;
+    if !output.status.success() {
+        return Err(GitError::operation_failed(&output.stderr));
+    }
+    Ok(())
+}
+
+/// Unstage one workspace-relative path.
+///
+/// With a HEAD: `git restore --staged -- <path>` (git >= 2.23). In an
+/// unborn repository (no HEAD, detected with `git rev-parse --verify
+/// --quiet HEAD`) the index-only fallback is `git rm -q --cached -- <path>`,
+/// which returns an added file to the untracked state. The worktree is
+/// never touched and never recreated.
+fn git_unstage_at(workspace: &Path, repo_rel: &str) -> Result<(), GitError> {
+    if is_conflicted(workspace, repo_rel)? {
+        return Err(GitError::unsupported_state());
+    }
+    let rel = workspace_rel_for(workspace, repo_rel)?;
+    contained_git_path(workspace, &rel)?;
+    let head = git_run(workspace, &["rev-parse", "--verify", "--quiet", "HEAD"])?;
+    if !head.status.success() {
+        // Unborn repository: `git restore --staged` has no HEAD to restore
+        // against; the index-only removal is the documented fallback.
+        let removed = git_run(workspace, &["rm", "-q", "--cached", "--", rel.as_str()])?;
+        if !removed.status.success() {
+            return Err(GitError::operation_failed(&removed.stderr));
+        }
+        return Ok(());
+    }
+    let restored = git_run(workspace, &["restore", "--staged", "--", rel.as_str()])?;
+    if !restored.status.success() {
+        return Err(GitError::operation_failed(&restored.stderr));
+    }
+    Ok(())
+}
+
+/// Stage one workspace file through the narrow Tauri host capability.
+#[tauri::command]
+pub fn git_stage_file(app: tauri::AppHandle, path: String) -> Result<(), GitError> {
+    let root = workspace_root(&app).map_err(GitError::workspace)?;
+    git_stage_at(&root, &path)
+}
+
+/// Unstage one workspace file through the narrow Tauri host capability.
+#[tauri::command]
+pub fn git_unstage_file(app: tauri::AppHandle, path: String) -> Result<(), GitError> {
+    let root = workspace_root(&app).map_err(GitError::workspace)?;
+    git_unstage_at(&root, &path)
 }
 
 
@@ -1012,6 +1281,260 @@ mod tests {
         assert_eq!(files.len(), 1);
         assert_eq!(files[0]["path"], "dash-name.txt");
         assert_eq!(files[0]["status"], ".M");
+    }
+
+    fn v2_status_of(root: &Path) -> Vec<Value> {
+        git_status_v2_at(root).unwrap()["files"].as_array().unwrap().clone()
+    }
+
+    fn status_of(root: &Path, path: &str) -> String {
+        v2_status_of(root)
+            .iter()
+            .find(|file| file["path"].as_str() == Some(path))
+            .unwrap_or_else(|| panic!("path {path} missing from v2 status"))["status"]
+            .as_str()
+            .unwrap()
+            .to_string()
+    }
+
+    #[test]
+    fn git_stage_and_unstage_tracked_modified_and_untracked() {
+        let root = fixture_root("m5c2-basic");
+        let git = |args: &[&str]| {
+            Command::new("git").current_dir(&root).args(args).output().expect("git available")
+        };
+        assert!(git(&["init", "-q", "-b", "main"]).status.success());
+        assert!(git(&["config", "user.email", "m5c2@example.test"]).status.success());
+        assert!(git(&["config", "user.name", "M5C2 Test"]).status.success());
+        fs::write(root.join("tracked.txt"), "one").unwrap();
+        assert!(git(&["add", "tracked.txt"]).status.success());
+        assert!(git(&["commit", "-q", "-m", "initial"]).status.success());
+
+        // tracked modified -> stage -> unstage
+        fs::write(root.join("tracked.txt"), "two").unwrap();
+        git_stage_at(&root, "tracked.txt").unwrap();
+        assert_eq!(status_of(&root, "tracked.txt"), "M.");
+        git_unstage_at(&root, "tracked.txt").unwrap();
+        assert_eq!(status_of(&root, "tracked.txt"), ".M");
+
+        // untracked -> stage -> moves to staged added -> unstage back
+        fs::write(root.join("new.txt"), "new").unwrap();
+        git_stage_at(&root, "new.txt").unwrap();
+        assert_eq!(status_of(&root, "new.txt"), "A.");
+        git_unstage_at(&root, "new.txt").unwrap();
+        assert_eq!(status_of(&root, "new.txt"), "??");
+    }
+
+    #[test]
+    fn git_stage_and_unstage_deleted_file_never_recreates_it() {
+        let root = fixture_root("m5c2-deleted");
+        let git = |args: &[&str]| {
+            Command::new("git").current_dir(&root).args(args).output().expect("git available")
+        };
+        assert!(git(&["init", "-q", "-b", "main"]).status.success());
+        assert!(git(&["config", "user.email", "m5c2@example.test"]).status.success());
+        assert!(git(&["config", "user.name", "M5C2 Test"]).status.success());
+        fs::write(root.join("gone.txt"), "x").unwrap();
+        assert!(git(&["add", "gone.txt"]).status.success());
+        assert!(git(&["commit", "-q", "-m", "initial"]).status.success());
+
+        fs::remove_file(root.join("gone.txt")).unwrap();
+        git_stage_at(&root, "gone.txt").unwrap();
+        let files = v2_status_of(&root);
+        assert_eq!(files[0]["status"], "D.");
+        git_unstage_at(&root, "gone.txt").unwrap();
+        let files = v2_status_of(&root);
+        assert_eq!(files[0]["status"], ".D");
+        // The worktree file must stay absent: stage/unstage never recreate.
+        assert!(!root.join("gone.txt").exists());
+    }
+
+    #[test]
+    fn git_stage_and_unstage_rename_uses_current_path() {
+        let root = fixture_root("m5c2-rename");
+        let git = |args: &[&str]| {
+            Command::new("git").current_dir(&root).args(args).output().expect("git available")
+        };
+        assert!(git(&["init", "-q", "-b", "main"]).status.success());
+        assert!(git(&["config", "user.email", "m5c2@example.test"]).status.success());
+        assert!(git(&["config", "user.name", "M5C2 Test"]).status.success());
+        fs::write(root.join("old.txt"), "old").unwrap();
+        assert!(git(&["add", "old.txt"]).status.success());
+        assert!(git(&["commit", "-q", "-m", "initial"]).status.success());
+
+        assert!(git(&["mv", "old.txt", "new name.txt"]).status.success());
+        git_stage_at(&root, "new name.txt").unwrap();
+        let files = v2_status_of(&root);
+        assert_eq!(files[0]["status"], "R.");
+        assert_eq!(files[0]["path"], "new name.txt");
+        assert_eq!(files[0]["originalPath"], "old.txt");
+
+        // git's own unstage semantics split a staged rename into a staged
+        // deletion of the original plus the new untracked file; the worktree
+        // is not modified and no file is recreated.
+        git_unstage_at(&root, "new name.txt").unwrap();
+        let files = v2_status_of(&root);
+        let old = files.iter().find(|f| f["path"] == "old.txt").unwrap();
+        let new = files.iter().find(|f| f["path"] == "new name.txt").unwrap();
+        assert_eq!(old["status"], "D.");
+        assert_eq!(new["status"], "??");
+        assert!(root.join("new name.txt").exists());
+        assert!(!root.join("old.txt").exists());
+    }
+
+    #[test]
+    fn git_stage_and_unstage_weird_filenames_nested_and_unicode() {
+        let root = fixture_root("m5c2-weird");
+        let git = |args: &[&str]| {
+            Command::new("git").current_dir(&root).args(args).output().expect("git available")
+        };
+        assert!(git(&["init", "-q", "-b", "main"]).status.success());
+        assert!(git(&["config", "user.email", "m5c2@example.test"]).status.success());
+        assert!(git(&["config", "user.name", "M5C2 Test"]).status.success());
+        fs::create_dir_all(root.join("nested/dir")).unwrap();
+        fs::write(root.join("--dash.txt"), "d").unwrap();
+        fs::write(root.join("with space.txt"), "s").unwrap();
+        fs::write(root.join("uni-èà.txt"), "u").unwrap();
+        fs::write(root.join("nested/dir/deep.txt"), "n").unwrap();
+        for rel in ["--dash.txt", "with space.txt", "uni-èà.txt", "nested/dir/deep.txt"] {
+            git_stage_at(&root, rel).unwrap();
+        }
+        let files = v2_status_of(&root);
+        assert_eq!(files.len(), 4);
+        for file in &files {
+            assert_eq!(file["status"], "A.");
+        }
+        for rel in ["--dash.txt", "with space.txt", "uni-èà.txt", "nested/dir/deep.txt"] {
+            git_unstage_at(&root, rel).unwrap();
+        }
+        let files = v2_status_of(&root);
+        assert_eq!(files.len(), 4);
+        for file in &files {
+            assert_eq!(file["status"], "??");
+        }
+    }
+
+    #[test]
+    fn git_mutations_enforce_workspace_containment_below_repo_root() {
+        let root = fixture_root("m5c2-containment");
+        let git = |args: &[&str]| {
+            Command::new("git").current_dir(&root).args(args).output().expect("git available")
+        };
+        assert!(git(&["init", "-q", "-b", "main"]).status.success());
+        assert!(git(&["config", "user.email", "m5c2@example.test"]).status.success());
+        assert!(git(&["config", "user.name", "M5C2 Test"]).status.success());
+        fs::create_dir_all(root.join("packages/frontend")).unwrap();
+        fs::write(root.join("packages/frontend/app.ts"), "app").unwrap();
+        fs::write(root.join("README.md"), "repo root").unwrap();
+        fs::write(root.join("packages/frontend/outside-link.txt"), "x").unwrap();
+        assert!(git(&["add", "."]).status.success());
+        assert!(git(&["commit", "-q", "-m", "initial"]).status.success());
+
+        let workspace = root.join("packages/frontend");
+        // Inside the workspace (repository-relative path below the prefix).
+        fs::write(root.join("packages/frontend/app.ts"), "edited").unwrap();
+        git_stage_at(&workspace, "packages/frontend/app.ts").unwrap();
+        git_unstage_at(&workspace, "packages/frontend/app.ts").unwrap();
+
+        // Same repository, outside the workspace: rejected by the layer.
+        fs::write(root.join("README.md"), "edited").unwrap();
+        let error = git_stage_at(&workspace, "README.md").unwrap_err();
+        assert_eq!(error.code, "PATH_OUTSIDE_WORKSPACE");
+
+        // Parent-relative and absolute inputs are rejected.
+        assert_eq!(git_stage_at(&workspace, "../frontend/app.ts").unwrap_err().code, "PATH_OUTSIDE_WORKSPACE");
+        assert_eq!(git_stage_at(&workspace, "/etc/passwd").unwrap_err().code, "PATH_OUTSIDE_WORKSPACE");
+
+        // Symlink escaping the workspace is rejected (canonical prefix check).
+        #[cfg(unix)]
+        {
+            std::os::unix::fs::symlink(root.join("README.md"), root.join("packages/frontend/escape")).unwrap();
+            assert_eq!(git_stage_at(&workspace, "escape").unwrap_err().code, "PATH_OUTSIDE_WORKSPACE");
+        }
+    }
+
+    #[test]
+    fn git_unstage_unborn_repository_uses_rm_cached() {
+        let root = fixture_root("m5c2-unborn");
+        let git = |args: &[&str]| {
+            Command::new("git").current_dir(&root).args(args).output().expect("git available")
+        };
+        assert!(git(&["init", "-q", "-b", "main"]).status.success());
+        assert!(git(&["config", "user.email", "m5c2@example.test"]).status.success());
+        assert!(git(&["config", "user.name", "M5C2 Test"]).status.success());
+        fs::write(root.join("u.txt"), "x").unwrap();
+        git_stage_at(&root, "u.txt").unwrap();
+        let files = v2_status_of(&root);
+        assert_eq!(files[0]["status"], "A.");
+        git_unstage_at(&root, "u.txt").unwrap();
+        let files = v2_status_of(&root);
+        assert_eq!(files[0]["status"], "??");
+    }
+
+    #[test]
+    fn git_mutations_reject_conflicted_paths() {
+        let root = fixture_root("m5c2-conflict");
+        let git = |args: &[&str]| {
+            Command::new("git").current_dir(&root).args(args).output().expect("git available")
+        };
+        assert!(git(&["init", "-q", "-b", "main"]).status.success());
+        assert!(git(&["config", "user.email", "m5c2@example.test"]).status.success());
+        assert!(git(&["config", "user.name", "M5C2 Test"]).status.success());
+        fs::write(root.join("conflict.txt"), "base").unwrap();
+        assert!(git(&["add", "."]).status.success());
+        assert!(git(&["commit", "-q", "-m", "init"]).status.success());
+        assert!(git(&["checkout", "-q", "-b", "side"]).status.success());
+        fs::write(root.join("conflict.txt"), "side").unwrap();
+        assert!(git(&["commit", "-qam", "side"]).status.success());
+        assert!(git(&["checkout", "-q", "main"]).status.success());
+        fs::write(root.join("conflict.txt"), "main").unwrap();
+        assert!(git(&["commit", "-qam", "main"]).status.success());
+        let _ = git(&["merge", "side"]);
+
+        assert_eq!(git_stage_at(&root, "conflict.txt").unwrap_err().code, "UNSUPPORTED_GIT_STATE");
+        assert_eq!(git_unstage_at(&root, "conflict.txt").unwrap_err().code, "UNSUPPORTED_GIT_STATE");
+    }
+
+    #[test]
+    fn contained_git_path_allows_missing_tail_and_rejects_escapes() {
+        let root = fixture_root("m5c2-contained");
+        fs::create_dir_all(root.join("sub")).unwrap();
+        fs::write(root.join("sub/exists.txt"), "x").unwrap();
+
+        // A deleted path (missing on disk) still resolves for git mutations.
+        assert_eq!(contained_git_path(&root, "sub/gone.txt").unwrap().file_name().unwrap(), "gone.txt");
+        assert!(contained_git_path(&root, "sub").unwrap().ends_with("sub"));
+        assert!(contained_git_path(&root, "").is_ok());
+        assert_eq!(contained_git_path(&root, "/etc").unwrap_err().code, "PATH_OUTSIDE_WORKSPACE");
+        assert_eq!(contained_git_path(&root, "../etc").unwrap_err().code, "PATH_OUTSIDE_WORKSPACE");
+        assert_eq!(contained_git_path(&root, "sub/../../etc").unwrap_err().code, "PATH_OUTSIDE_WORKSPACE");
+
+        #[cfg(unix)]
+        {
+            std::os::unix::fs::symlink(std::env::temp_dir(), root.join("escape")).unwrap();
+            assert_eq!(contained_git_path(&root, "escape").unwrap_err().code, "PATH_OUTSIDE_WORKSPACE");
+        }
+    }
+
+    #[test]
+    fn git_status_v2_reports_workspace_prefix_for_subdirectory_workspaces() {
+        let root = fixture_root("m5c2-prefix");
+        let git = |args: &[&str]| {
+            Command::new("git").current_dir(&root).args(args).output().expect("git available")
+        };
+        assert!(git(&["init", "-q", "-b", "main"]).status.success());
+        assert!(git(&["config", "user.email", "m5c2@example.test"]).status.success());
+        assert!(git(&["config", "user.name", "M5C2 Test"]).status.success());
+        fs::create_dir_all(root.join("sub")).unwrap();
+        fs::write(root.join("sub/a.txt"), "one").unwrap();
+        assert!(git(&["add", "."]).status.success());
+        assert!(git(&["commit", "-q", "-m", "initial"]).status.success());
+        fs::write(root.join("sub/a.txt"), "two").unwrap();
+
+        let result = git_status_v2_at(&root.join("sub")).unwrap();
+        assert_eq!(result["workspacePrefix"], "sub");
+        let root_result = git_status_v2_at(&root).unwrap();
+        assert_eq!(root_result["workspacePrefix"], "");
     }
 
     #[test]

@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import type { DesktopGitStatusV2 } from '@deepseek-ai/dsh-desktop-client'
-import { sortChanges, splitGitStatus } from '../src/inspector/git-model.ts'
+import { actionsFor, sortChanges, splitGitStatus, stageDirtyWarning, toWorkspacePath } from '../src/inspector/git-model.ts'
 
 const STATUS: DesktopGitStatusV2 = {
   repository: true,
   branch: 'main',
   dirty: true,
-  changedFiles: 6,
+  changedFiles: 7,
+  workspacePrefix: '',
   files: [
     { path: 'tracked.txt', status: 'MM', conflicted: false },
     { path: 'added.txt', status: 'A.', conflicted: false },
@@ -57,9 +58,60 @@ describe('M5C git status model', () => {
 
   it('sorts rows by path without mutating the input', () => {
     const sorted = sortChanges([
-      { path: 'zeta.txt', status: 'M ', conflicted: false },
-      { path: 'alpha.txt', status: 'M ', conflicted: false },
+      { path: 'zeta.txt', status: 'M ', conflicted: false, insideWorkspace: true },
+      { path: 'alpha.txt', status: 'M ', conflicted: false, insideWorkspace: true },
     ])
     expect(sorted.map(entry => entry.path)).toEqual(['alpha.txt', 'zeta.txt'])
+  })
+
+  it('maps repository-relative paths to workspace-visible paths', () => {
+    expect(toWorkspacePath('src/app.ts', '')).toBe('src/app.ts')
+    expect(toWorkspacePath('packages/frontend/src/app.ts', 'packages/frontend')).toBe('src/app.ts')
+    expect(toWorkspacePath('packages/frontend', 'packages/frontend')).toBe('.')
+    expect(toWorkspacePath('README.md', 'packages/frontend')).toBeUndefined()
+  })
+
+  it('flags rows outside the workspace and strips the prefix', () => {
+    const model = splitGitStatus({
+      repository: true,
+      branch: 'main',
+      dirty: true,
+      changedFiles: 2,
+      workspacePrefix: 'packages/frontend',
+      files: [
+        { path: 'packages/frontend/app.ts', status: '.M', conflicted: false },
+        { path: 'README.md', status: '.M', conflicted: false },
+      ],
+    })
+    const inside = model?.unstaged.find(entry => entry.path === 'packages/frontend/app.ts')
+    const outside = model?.unstaged.find(entry => entry.path === 'README.md')
+    expect(inside?.insideWorkspace).toBe(true)
+    expect(inside?.workspacePath).toBe('app.ts')
+    expect(outside?.insideWorkspace).toBe(false)
+    expect(outside?.workspacePath).toBeUndefined()
+  })
+
+  it('derives actions from the porcelain state, not the section', () => {
+    const model = splitGitStatus(STATUS)
+    const byPath = Object.fromEntries((model?.staged ?? []).map(e => [e.path, e]))
+    Object.assign(byPath, Object.fromEntries((model?.unstaged ?? []).map(e => [e.path, e])))
+    expect(actionsFor(byPath['tracked.txt'] as never)).toEqual({ staged: 'unstage', changes: 'stage' })
+    expect(actionsFor(byPath['added.txt'] as never)).toEqual({ staged: 'unstage' })
+    expect(actionsFor(byPath['worktree-only.txt'] as never)).toEqual({ changes: 'stage' })
+    expect(actionsFor(byPath['untracked.txt'] as never)).toEqual({ changes: 'stage' })
+    expect(actionsFor({ path: 'conflict.txt', status: 'UU', conflicted: true, insideWorkspace: true })).toEqual({})
+  })
+
+  it('derives no actions for rows outside the workspace', () => {
+    const outside = { path: 'README.md', status: '.M', conflicted: false, insideWorkspace: false }
+    expect(actionsFor(outside)).toEqual({})
+  })
+
+  it('warns only when the row matches a dirty editor buffer inside the workspace', () => {
+    const inside = { path: 'packages/frontend/app.ts', status: '.M', conflicted: false, insideWorkspace: true, workspacePath: 'app.ts' }
+    const outside = { path: 'README.md', status: '.M', conflicted: false, insideWorkspace: false }
+    expect(stageDirtyWarning(inside, new Set(['app.ts']))).toBe(true)
+    expect(stageDirtyWarning(inside, new Set(['other.ts']))).toBe(false)
+    expect(stageDirtyWarning(outside, new Set([]))).toBe(false)
   })
 })

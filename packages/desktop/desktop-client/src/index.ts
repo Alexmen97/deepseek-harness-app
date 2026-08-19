@@ -16,6 +16,7 @@ export type {
   DesktopFsEntry,
   DesktopGitDiff,
   DesktopGitStatus,
+  DesktopGitError,
   DesktopGitStatusV2,
   DesktopGitStatusV2Entry,
   DesktopHost,

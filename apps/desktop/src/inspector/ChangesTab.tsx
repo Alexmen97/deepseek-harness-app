@@ -1,35 +1,62 @@
 /** M4/M5C working-tree changes: porcelain-v2 status model with the Staged
- * Changes / Changes split (M5C.1, read-only rows; actions land in M5C.2+). */
+ * Changes / Changes split and per-file Stage / Unstage actions (M5C.2).
+ * Discard, hunk operations, and commit flows are out of scope. */
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useSyncExternalStore } from 'react'
 import type { ReactElement } from 'react'
-import { desktopBindings, type DesktopGitDiff, type DesktopGitStatusV2 } from '@deepseek-ai/dsh-desktop-client'
+import { desktopBindings } from '@deepseek-ai/dsh-desktop-client'
 import { useDesktopStrings, desktopPalette, useDesktopAppearance } from '@deepseek-ai/dsh-desktop-client/src/ui/strings'
 import { parseDiff, statusCategory } from './diff.ts'
-import { sortChanges, splitGitStatus, type GitChangeEntry } from './git-model.ts'
+import { actionsFor, sortChanges, splitGitStatus, stageDirtyWarning, type GitChangeEntry } from './git-model.ts'
+import { createChangesCore, type ChangesCore } from './changes-core.ts'
 import { onFilesInvalidated } from './filesync.ts'
+import { useEditorState } from './editorStore.ts'
+
+let core: ChangesCore | undefined
+const getCore = (): ChangesCore => {
+  if (core === undefined) {
+    const host = desktopBindings().host
+    core = createChangesCore({
+      gitStatusV2: () => host.gitStatusV2().then(status => status),
+      gitDiff: () => host.gitDiff().then(diff => diff),
+      gitStageFile: async (path) => { await host.gitStageFile(path) },
+      gitUnstageFile: async (path) => { await host.gitUnstageFile(path) },
+    })
+  }
+  return core
+}
 
 export function ChangesTab(): ReactElement {
   const { t } = useDesktopStrings()
   const palette = desktopPalette(useDesktopAppearance())
-  const host = desktopBindings().host
-  const [status, setStatus] = useState<DesktopGitStatusV2 | undefined>(undefined)
-  const [diff, setDiff] = useState<DesktopGitDiff | undefined>(undefined)
+  const editor = useEditorState()
+  const operations = getCore()
+  const status = useSyncExternalStore(operations.subscribe, operations.getStatus)
+  const diff = useSyncExternalStore(operations.subscribe, operations.getDiff)
+  const ops = useSyncExternalStore(operations.subscribe, operations.getOps)
 
-  const refresh = useCallback((): void => {
-    void host.gitStatusV2().then(setStatus).catch(() => { setStatus(undefined) })
-    void host.gitDiff().then(setDiff).catch(() => { setDiff(undefined) })
-  }, [host])
-  useEffect(refresh, [refresh])
+  const refresh = useCallback((): void => { void operations.refresh() }, [operations])
+  useEffect(() => { void operations.refresh() }, [operations])
 
   // M5B live refresh: watcher invalidations re-run git status and the diff
-  // in one debounced pass; git never runs per filesystem event.
+  // in one debounced pass; git never runs per filesystem event. Stage/unstage
+  // refresh directly after the host operation (the watcher does not own
+  // index changes).
   useEffect(() => {
     return onFilesInvalidated(() => { refresh() })
   }, [refresh])
 
   const model = splitGitStatus(status)
   const parsed = diff?.diff !== undefined ? parseDiff(diff.diff) : undefined
+  const dirtyPaths = useMemo(() => {
+    const dirty = new Set<string>()
+    for (const path of editor.order) {
+      const buffer = editor.buffers[path]
+      if (buffer?.status === 'dirty') dirty.add(path)
+    }
+    return dirty
+  }, [editor])
+
   let headerContent: ReactElement
   if (status === undefined) {
     headerContent = <span style={{ color: palette.muted }}>…</span>
@@ -55,20 +82,60 @@ export function ChangesTab(): ReactElement {
       {(kind === 'add' ? '+ ' : kind === 'del' ? '- ' : '  ') + text}
     </div>
   )
-  const changeRow = (entry: GitChangeEntry, key: number): ReactElement => (
-    <div key={key} style={{ display: 'flex', gap: 6, padding: '1px 0', color: palette.text, fontSize: 12 }}>
+  const actionButton = (entry: GitChangeEntry, action: 'stage' | 'unstage', key: number): ReactElement => {
+    const pending = ops.pending[entry.path]
+    const busy = pending !== undefined
+    return (
+      <div key={key} style={{ display: 'flex', gap: 6, alignItems: 'center', padding: '1px 0', color: palette.text, fontSize: 12 }}>
+        <span style={{ color: palette.muted, minWidth: 20 }}>{statusCategory(entry.status)}</span>
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{entry.path}</span>
+        {entry.originalPath !== undefined && <span style={{ color: palette.muted, flexShrink: 0 }}>← {entry.originalPath}</span>}
+        {entry.conflicted && <span style={{ color: '#d29922', flexShrink: 0 }}>{t('changes.conflicted')}</span>}
+        {!entry.insideWorkspace && <span style={{ color: palette.muted, flexShrink: 0, fontSize: 11 }}>{t('changes.outsideWorkspace')}</span>}
+        <span style={{ flex: 1 }} />
+        <button
+          onClick={() => { void (action === 'stage' ? operations.stage(entry.path) : operations.unstage(entry.path)) }}
+          disabled={busy}
+          aria-label={action === 'stage' ? t('changes.stage') + ' ' + entry.path : t('changes.unstage') + ' ' + entry.path}
+          aria-busy={busy}
+          title={action === 'stage' ? t('changes.stage') : t('changes.unstage')}
+          style={{ background: 'transparent', border: '1px solid ' + palette.inputBorder, color: palette.text, borderRadius: 6, fontSize: 11, padding: '1px 8px', cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.6 : 1 }}
+        >
+          {busy ? (pending === 'staging' ? t('changes.staging') : t('changes.unstaging')) : action === 'stage' ? t('changes.stage') : t('changes.unstage')}
+        </button>
+      </div>
+    )
+  }
+  const plainRow = (entry: GitChangeEntry, key: number): ReactElement => (
+    <div key={key} style={{ display: 'flex', gap: 6, alignItems: 'center', padding: '1px 0', color: palette.text, fontSize: 12 }}>
       <span style={{ color: palette.muted, minWidth: 20 }}>{statusCategory(entry.status)}</span>
       <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{entry.path}</span>
       {entry.originalPath !== undefined && <span style={{ color: palette.muted, flexShrink: 0 }}>← {entry.originalPath}</span>}
       {entry.conflicted && <span style={{ color: '#d29922', flexShrink: 0 }}>{t('changes.conflicted')}</span>}
+      {!entry.insideWorkspace && <span style={{ color: palette.muted, flexShrink: 0, fontSize: 11 }}>{t('changes.outsideWorkspace')}</span>}
     </div>
   )
-  const section = (title: string, rows: GitChangeEntry[], empty: string): ReactElement => (
+  const changeRow = (entry: GitChangeEntry, section: 'staged' | 'changes', key: number): ReactElement => {
+    const actions = actionsFor(entry)
+    const action = section === 'staged' ? actions.staged : actions.changes
+    const warnDirty = section === 'changes' && action === 'stage' && stageDirtyWarning(entry, dirtyPaths)
+    const error = ops.errors[entry.path]
+    return (
+      <div key={key}>
+        {action !== undefined
+          ? actionButton(entry, action, 0)
+          : plainRow(entry, 0)}
+        {warnDirty && <div style={{ color: '#d29922', fontSize: 11, padding: '0 0 2px 26px' }}>{t('changes.dirtyStageWarning')}</div>}
+        {error !== undefined && <div style={{ color: '#f85149', fontSize: 11, padding: '0 0 2px 26px' }} title={error.detail}>{t('changes.opFailed')}: {error.message}</div>}
+      </div>
+    )
+  }
+  const section = (title: string, rows: GitChangeEntry[], empty: string, sectionKind: 'staged' | 'changes'): ReactElement => (
     <div style={{ padding: '4px 8px', borderBottom: '1px solid ' + palette.inputBorder }}>
       <div style={{ fontSize: 11, color: palette.muted, textTransform: 'uppercase', letterSpacing: 0.4, padding: '2px 0' }}>{title}</div>
       {rows.length === 0
         ? <div style={{ color: palette.muted, fontSize: 12, padding: '2px 0' }}>{empty}</div>
-        : rows.map((entry, index) => changeRow(entry, index))}
+        : rows.map((entry, index) => changeRow(entry, sectionKind, index))}
     </div>
   )
 
@@ -81,9 +148,9 @@ export function ChangesTab(): ReactElement {
         )}
       </div>
       {model !== undefined && (
-        <div style={{ maxHeight: '34%', overflowY: 'auto', borderBottom: '1px solid ' + palette.inputBorder }}>
-          {section(t('changes.staged'), sortChanges(model.staged), t('changes.stagedEmpty'))}
-          {section(t('changes.changes'), sortChanges([...model.unstaged, ...model.conflicted]), t('changes.empty'))}
+        <div style={{ maxHeight: '40%', overflowY: 'auto', borderBottom: '1px solid ' + palette.inputBorder }}>
+          {section(t('changes.staged'), sortChanges(model.staged), t('changes.stagedEmpty'), 'staged')}
+          {section(t('changes.changes'), sortChanges([...model.unstaged, ...model.conflicted]), t('changes.empty'), 'changes')}
         </div>
       )}
       <div style={{ padding: '4px 8px', fontSize: 11.5, color: palette.muted, display: 'flex', gap: 12 }}>
