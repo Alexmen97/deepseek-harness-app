@@ -77,6 +77,7 @@ pub fn run() {
             commands::git_stage_file,
             commands::git_unstage_file,
             commands::git_discard_file,
+            commands::git_diff_file,
             commands::diagnostics,
             commands::menu_set_language,
             commands::about_info,

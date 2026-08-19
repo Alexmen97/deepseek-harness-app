@@ -4,7 +4,10 @@
  * tests need no Tauri bindings; the Changes tab wires the real host.
  */
 
-import type { DesktopGitDiff, DesktopGitError, DesktopGitStatusV2 } from '@deepseek-ai/dsh-desktop-client'
+import type { DesktopGitDiff, DesktopGitError, DesktopGitFileDiff, DesktopGitStatusV2 } from '@deepseek-ai/dsh-desktop-client'
+
+/** The two diff modes; cached selects the staged side. */
+export type DiffMode = 'unstaged' | 'staged'
 
 /** The narrow host surface this core drives. */
 export interface ChangesHost {
@@ -13,6 +16,7 @@ export interface ChangesHost {
   gitStageFile(path: string): Promise<void>
   gitUnstageFile(path: string): Promise<void>
   gitDiscardFile(path: string): Promise<void>
+  gitDiffFile(path: string, cached: boolean): Promise<DesktopGitFileDiff>
 }
 
 /** Options for the operations core; the discard guard is a UI data-loss guard only. */
@@ -31,6 +35,20 @@ export interface ChangesOpsState {
   errors: Record<string, DesktopGitError | undefined>
 }
 
+/** The diff viewer selection and per-mode diff cache (session-only). */
+export interface ChangesViewState {
+  /** Selected repository-relative path; undefined shows the empty state. */
+  selectedPath: string | undefined
+  /** Active diff mode; defaults from the clicked section. */
+  mode: DiffMode
+  /** Path -> mode -> cached per-file diff result. */
+  diffs: Record<string, Partial<Record<DiffMode, DesktopGitFileDiff>>>
+  /** Path -> mode currently loading (dedupe concurrent requests). */
+  loading: Record<string, boolean>
+}
+
+const EMPTY_VIEW: ChangesViewState = { selectedPath: undefined, mode: 'unstaged', diffs: {}, loading: {} }
+
 export interface ChangesCore {
   getStatus: () => DesktopGitStatusV2 | undefined
   getDiff: () => DesktopGitDiff | undefined
@@ -43,6 +61,12 @@ export interface ChangesCore {
   unstage: (path: string) => Promise<void>
   /** Discard one tracked worktree change; blocked locally while the editor is dirty. */
   discard: (path: string) => Promise<void>
+  /** Select a file; the diff mode defaults from the clicked section (session-only). */
+  select: (path: string | undefined, from: 'staged' | 'changes') => void
+  /** Switch the active diff mode of the selected file. */
+  setMode: (mode: DiffMode) => void
+  /** The diff viewer selection and per-mode cache. */
+  getView: () => ChangesViewState
   subscribe: (listener: () => void) => () => void
 }
 
@@ -53,8 +77,29 @@ export function createChangesCore(host: ChangesHost, options: ChangesCoreOptions
   let status: DesktopGitStatusV2 | undefined
   let diff: DesktopGitDiff | undefined
   let ops: ChangesOpsState = { pending: {}, errors: {} }
+  let view: ChangesViewState = EMPTY_VIEW
   const listeners = new Set<() => void>()
   const emit = (): void => { for (const listener of listeners) listener() }
+
+  const loadDiff = async (path: string, mode: DiffMode): Promise<void> => {
+    const cached = view.diffs[path]?.[mode]
+    if (cached !== undefined) return
+    const loadingKey = path + ':' + mode
+    if (view.loading[loadingKey] === true) return
+    view = { ...view, loading: { ...view.loading, [loadingKey]: true } }
+    emit()
+    try {
+      const result = await host.gitDiffFile(path, mode === 'staged')
+      view = {
+        ...view,
+        loading: { ...view.loading, [loadingKey]: false },
+        diffs: { ...view.diffs, [path]: { ...view.diffs[path], [mode]: result } },
+      }
+    } catch {
+      view = { ...view, loading: { ...view.loading, [loadingKey]: false } }
+    }
+    emit()
+  }
 
   const setPending = (path: string, state: ChangeOpState | 'idle'): void => {
     if (state === 'idle') {
@@ -72,6 +117,17 @@ export function createChangesCore(host: ChangesHost, options: ChangesCoreOptions
     ops = { pending: ops.pending, errors }
   }
 
+  /** Whether the path still exists in the model with the given mode available. */
+  const modeAvailable = (path: string, mode: DiffMode, current: DesktopGitStatusV2 | undefined): boolean => {
+    const files = current?.files ?? []
+    const entry = files.find(file => file.path === path)
+    if (entry === undefined || entry.conflicted === true) return false
+    if (entry.status === '??') return mode === 'unstaged' && files.some(f => f.path === path)
+    const x = entry.status.charAt(0)
+    const y = entry.status.charAt(1)
+    return mode === 'staged' ? x !== '.' : y !== '.'
+  }
+
   const refresh = async (): Promise<void> => {
     const [nextStatus, nextDiff] = await Promise.all([
       host.gitStatusV2().catch(() => undefined),
@@ -79,6 +135,23 @@ export function createChangesCore(host: ChangesHost, options: ChangesCoreOptions
     ])
     status = nextStatus
     diff = nextDiff
+    // Selection continuity: keep the same logical file when it still exists
+    // in another section; fall back to the empty state otherwise.
+    const selected = view.selectedPath
+    if (selected !== undefined) {
+      const exists = (nextStatus?.files ?? []).some(file => file.path === selected)
+      if (!exists) {
+        view = { ...view, selectedPath: undefined }
+      } else if (!modeAvailable(selected, view.mode, nextStatus)) {
+        const other: DiffMode = view.mode === 'staged' ? 'unstaged' : 'staged'
+        if (modeAvailable(selected, other, nextStatus)) {
+          view = { ...view, mode: other }
+        }
+      }
+      if (view.selectedPath !== undefined) {
+        void loadDiff(view.selectedPath, view.mode)
+      }
+    }
     emit()
   }
 
@@ -120,6 +193,20 @@ export function createChangesCore(host: ChangesHost, options: ChangesCoreOptions
       }
       return host.gitDiscardFile(path)
     }),
+    select: (path, from) => {
+      const mode: DiffMode = from === 'staged' ? 'staged' : 'unstaged'
+      view = { ...view, selectedPath: path, mode }
+      emit()
+      if (path !== undefined) void loadDiff(path, mode)
+    },
+    setMode: (mode) => {
+      const path = view.selectedPath
+      if (path === undefined || view.mode === mode) return
+      view = { ...view, mode }
+      emit()
+      void loadDiff(path, mode)
+    },
+    getView: () => view,
   }
 }
 

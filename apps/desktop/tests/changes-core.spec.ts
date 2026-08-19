@@ -69,6 +69,9 @@ function fakeHost(): FakeHost {
       }
     },
     gitUnstageFile: async (path) => { calls.push('unstage:' + path) },
+    gitDiffFile: async (path) => {
+      return { diff: 'diff --git a/' + path + ' b/' + path + '\n', tooLarge: false, binary: false }
+    },
     gitDiscardFile: async (path) => {
       discardCalls += 1
       calls.push('discard:' + path)
@@ -197,6 +200,52 @@ describe('M5C.2 changes operations core', () => {
     await core.discard('a.txt')
     expect(core.getOps().errors['a.txt']?.code).toBe('GIT_STATE_CHANGED')
     expect(host.statusCalls()).toBe(1)
+  })
+
+  it('selects a file with the section default mode and loads its diff', async () => {
+    const host = fakeHost()
+    const core = createChangesCore(host)
+    await core.refresh()
+    core.select('a.txt', 'changes')
+    expect(core.getView().selectedPath).toBe('a.txt')
+    expect(core.getView().mode).toBe('unstaged')
+    await Promise.resolve()
+    expect(core.getView().diffs['a.txt']?.['unstaged']).toBeDefined()
+    core.select('a.txt', 'staged')
+    expect(core.getView().mode).toBe('staged')
+    await Promise.resolve()
+    expect(core.getView().diffs['a.txt']?.['staged']).toBeDefined()
+  })
+
+  it('switches modes via setMode without reloading cached diffs', async () => {
+    const host = fakeHost()
+    const core = createChangesCore(host)
+    await core.refresh()
+    core.select('a.txt', 'changes')
+    await Promise.resolve()
+    core.setMode('staged')
+    expect(core.getView().mode).toBe('staged')
+    await Promise.resolve()
+    core.setMode('staged')
+    expect(core.getView().mode).toBe('staged')
+  })
+
+  it('keeps selection on the same file across sections after refresh', async () => {
+    const host = fakeHost()
+    const core = createChangesCore(host)
+    await core.refresh()
+    core.select('a.txt', 'changes')
+    await core.refresh()
+    expect(core.getView().selectedPath).toBe('a.txt')
+  })
+
+  it('drops the selection when the file disappears entirely', async () => {
+    const host = fakeHost()
+    const core = createChangesCore(host)
+    await core.refresh()
+    core.select('gone.txt', 'changes')
+    await core.refresh()
+    expect(core.getView().selectedPath).toBeUndefined()
   })
 
   it('notifies subscribers on state changes', async () => {

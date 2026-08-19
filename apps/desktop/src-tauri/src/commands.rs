@@ -922,6 +922,47 @@ pub fn git_discard_file(app: tauri::AppHandle, path: String) -> Result<(), GitEr
     git_discard_at(&root, &path)
 }
 
+/// Per-path git diff result for the M5C.4 diff viewer.
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitFileDiff {
+    pub diff: String,
+    pub too_large: bool,
+    pub binary: bool,
+}
+
+/// One per-path diff over a fixed argv: `git diff -- <path>` (unstaged) or
+/// `git diff --cached -- <path>` (staged). The path is workspace-relative
+/// after containment; the 512 KiB cap from M4 is preserved and reported as
+/// `tooLarge` so the UI never renders a truncated diff that looks complete.
+fn git_diff_file_at(workspace: &Path, repo_rel: &str, cached: bool) -> Result<GitFileDiff, GitError> {
+    let rel = workspace_rel_for(workspace, repo_rel)?;
+    contained_git_path(workspace, &rel)?;
+    let mut args: Vec<&str> = vec!["diff", "--no-color", "--no-ext-diff"];
+    if cached {
+        args.push("--cached");
+    }
+    args.push("--");
+    args.push(rel.as_str());
+    let output = git_run(workspace, &args)?;
+    if !output.status.success() {
+        return Err(GitError::operation_failed(&output.stderr));
+    }
+    let text = String::from_utf8_lossy(&output.stdout).into_owned();
+    let too_large = text.len() > GIT_DIFF_MAX_BYTES;
+    let binary = text.contains("Binary files ") || text.contains("GIT binary patch") || text.contains("Binary file ");
+    Ok(GitFileDiff { diff: text, too_large, binary })
+}
+
+/// Fetch one staged or unstaged per-file diff through the narrow Tauri host
+/// capability. `cached` selects the staged side (`--cached`); the workspace
+/// watcher is never consulted for index-only state.
+#[tauri::command]
+pub fn git_diff_file(app: tauri::AppHandle, path: String, cached: bool) -> Result<GitFileDiff, GitError> {
+    let root = workspace_root(&app).map_err(GitError::workspace)?;
+    git_diff_file_at(&root, &path, cached)
+}
+
 
 /// Git status body over an explicit root for tests.
 fn git_status_at(root: &Path) -> Result<Value, String> {
@@ -1731,6 +1772,87 @@ mod tests {
         // Parent-relative and absolute inputs rejected.
         assert_eq!(git_discard_at(&workspace, "../frontend/app.ts").unwrap_err().code, "PATH_OUTSIDE_WORKSPACE");
         assert_eq!(git_discard_at(&workspace, "/etc/passwd").unwrap_err().code, "PATH_OUTSIDE_WORKSPACE");
+    }
+
+    #[test]
+    fn git_diff_file_staged_and_unstaged_sides_of_the_same_file() {
+        let root = fixture_root("m5c4-mm");
+        git_init_committed(&root, &[("f.txt", "A\n")]);
+        // index = B, worktree = C
+        fs::write(root.join("f.txt"), "B\n").unwrap();
+        let git = |args: &[&str]| {
+            Command::new("git").current_dir(&root).args(args).output().expect("git available")
+        };
+        assert!(git(&["add", "f.txt"]).status.success());
+        fs::write(root.join("f.txt"), "C\n").unwrap();
+
+        // Staged: A -> B; unstaged: B -> C. Never A -> C on either side.
+        let staged = git_diff_file_at(&root, "f.txt", true).unwrap();
+        assert!(staged.diff.contains("-A") && staged.diff.contains("+B"));
+        assert!(!staged.diff.contains("+C"));
+        let unstaged = git_diff_file_at(&root, "f.txt", false).unwrap();
+        assert!(unstaged.diff.contains("-B") && unstaged.diff.contains("+C"));
+        assert!(!unstaged.diff.contains("+A"));
+    }
+
+    #[test]
+    fn git_diff_file_new_staged_and_untracked_and_deletions() {
+        let root = fixture_root("m5c4-new-del");
+        git_init_committed(&root, &[("a.txt", "A\n"), ("d.txt", "D\n")]);
+        let git = |args: &[&str]| {
+            Command::new("git").current_dir(&root).args(args).output().expect("git available")
+        };
+        // staged new file: cached shows the full addition
+        fs::write(root.join("new.txt"), "NEW\n").unwrap();
+        assert!(git(&["add", "new.txt"]).status.success());
+        let staged = git_diff_file_at(&root, "new.txt", true).unwrap();
+        assert!(staged.diff.contains("new file mode") && staged.diff.contains("+NEW"));
+
+        // untracked: no fake diff (git diff -- <untracked> is empty)
+        fs::write(root.join("u.txt"), "U\n").unwrap();
+        let untracked = git_diff_file_at(&root, "u.txt", false).unwrap();
+        assert!(untracked.diff.trim().is_empty());
+
+        // unstaged deletion and staged deletion both render the removal
+        fs::remove_file(root.join("d.txt")).unwrap();
+        let unstaged = git_diff_file_at(&root, "d.txt", false).unwrap();
+        assert!(unstaged.diff.contains("deleted file mode") && unstaged.diff.contains("-D"));
+        assert!(git(&["add", "d.txt"]).status.success());
+        let staged = git_diff_file_at(&root, "d.txt", true).unwrap();
+        assert!(staged.diff.contains("deleted file mode") && staged.diff.contains("-D"));
+    }
+
+    #[test]
+    fn git_diff_file_detects_binary_without_payload() {
+        let root = fixture_root("m5c4-binary");
+        let git = |args: &[&str]| {
+            Command::new("git").current_dir(&root).args(args).output().expect("git available")
+        };
+        assert!(git(&["init", "-q", "-b", "main"]).status.success());
+        assert!(git(&["config", "user.email", "m5c4@example.test"]).status.success());
+        assert!(git(&["config", "user.name", "M5C4 Test"]).status.success());
+        fs::write(root.join("bin.dat"), [0u8, 1, 2]).unwrap();
+        assert!(git(&["add", "bin.dat"]).status.success());
+        assert!(git(&["commit", "-q", "-m", "bin"]).status.success());
+        fs::write(root.join("bin.dat"), [0u8, 1, 3]).unwrap();
+
+        let result = git_diff_file_at(&root, "bin.dat", false).unwrap();
+        assert!(result.binary);
+        assert!(result.diff.contains("Binary files"));
+    }
+
+    #[test]
+    fn git_diff_file_enforces_workspace_containment() {
+        let root = fixture_root("m5c4-containment");
+        git_init_committed(&root, &[("packages/frontend/app.ts", "app\n"), ("README.md", "root\n")]);
+        let workspace = root.join("packages/frontend");
+        fs::write(root.join("packages/frontend/app.ts"), "edited\n").unwrap();
+        // Inside: allowed.
+        git_diff_file_at(&workspace, "packages/frontend/app.ts", false).unwrap();
+        // Outside and malicious inputs: rejected before any git read.
+        assert_eq!(git_diff_file_at(&workspace, "README.md", false).unwrap_err().code, "PATH_OUTSIDE_WORKSPACE");
+        assert_eq!(git_diff_file_at(&workspace, "../frontend/app.ts", false).unwrap_err().code, "PATH_OUTSIDE_WORKSPACE");
+        assert_eq!(git_diff_file_at(&workspace, "/etc/passwd", false).unwrap_err().code, "PATH_OUTSIDE_WORKSPACE");
     }
 
     #[test]

@@ -1,7 +1,6 @@
-/** M4/M5C working-tree changes: porcelain-v2 status model with the Staged
- * Changes / Changes split and per-file Stage / Unstage / Discard actions
- * (M5C.2 stage/unstage, M5C.3 tracked-worktree discard with confirmation).
- * Hunk operations and commit flows are out of scope. */
+/** M4/M5C working-tree changes: porcelain-v2 status model, per-file
+ * Stage / Unstage / Discard actions (M5C.2/M5C.3), and the M5C.4
+ * per-file staged/unstaged diff viewer with line numbers and navigation. */
 
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import type { ReactElement } from 'react'
@@ -11,7 +10,7 @@ import { parseDiff, statusCategory } from './diff.ts'
 import { actionsFor, discardBlockedReason, hasStagedSide, sortChanges, splitGitStatus, stageDirtyWarning, type GitChangeEntry } from './git-model.ts'
 import { createChangesCore, type ChangesCore } from './changes-core.ts'
 import { onFilesInvalidated } from './filesync.ts'
-import { getEditorState, useEditorState } from './editorStore.ts'
+import { getEditorState, openFile, useEditorState } from './editorStore.ts'
 
 let core: ChangesCore | undefined
 const getCore = (): ChangesCore => {
@@ -23,6 +22,7 @@ const getCore = (): ChangesCore => {
       gitStageFile: async (path) => { await host.gitStageFile(path) },
       gitUnstageFile: async (path) => { await host.gitUnstageFile(path) },
       gitDiscardFile: async (path) => { await host.gitDiscardFile(path) },
+      gitDiffFile: (path, cached) => host.gitDiffFile(path, cached),
     }, {
       // UI data-loss guard only: the Rust host validates git/path state independently.
       isDirty: path => getEditorState().buffers[path]?.status === 'dirty',
@@ -46,23 +46,20 @@ export function ChangesTab(): ReactElement {
   const editor = useEditorState()
   const operations = getCore()
   const status = useSyncExternalStore(operations.subscribe, operations.getStatus)
-  const diff = useSyncExternalStore(operations.subscribe, operations.getDiff)
   const ops = useSyncExternalStore(operations.subscribe, operations.getOps)
+  const view = useSyncExternalStore(operations.subscribe, operations.getView)
   const [confirming, setConfirming] = useState<GitChangeEntry | undefined>(undefined)
 
   const refresh = useCallback((): void => { void operations.refresh() }, [operations])
   useEffect(() => { void operations.refresh() }, [operations])
 
-  // M5B live refresh: watcher invalidations re-run git status and the diff
-  // in one debounced pass; git never runs per filesystem event. Stage/
-  // unstage/discard refresh directly after the host operation (the watcher
-  // does not own index changes; discard also refreshes git immediately).
+  // M5B live refresh: watcher invalidations re-run git status; index-only
+  // mutations refresh directly after the host operation.
   useEffect(() => {
     return onFilesInvalidated(() => { refresh() })
   }, [refresh])
 
   const model = splitGitStatus(status)
-  const parsed = diff?.diff !== undefined ? parseDiff(diff.diff) : undefined
   const dirtyPaths = useMemo(() => {
     const dirty = new Set<string>()
     for (const path of editor.order) {
@@ -71,6 +68,29 @@ export function ChangesTab(): ReactElement {
     }
     return dirty
   }, [editor])
+
+  const selectedPath = view.selectedPath
+  const selectedEntry = useMemo(() => {
+    if (selectedPath === undefined || model === undefined) return undefined
+    return [...model.staged, ...model.unstaged, ...model.conflicted].find(entry => entry.path === selectedPath)
+  }, [selectedPath, model])
+  const selectedDiff = selectedPath !== undefined ? view.diffs[selectedPath]?.[view.mode] : undefined
+  const parsedSelected = selectedDiff?.diff !== undefined && !selectedDiff.binary && !selectedDiff.tooLarge && selectedDiff.diff.trim() !== ''
+    ? parseDiff(selectedDiff.diff) : undefined
+  const stagedAvailable = selectedEntry !== undefined && selectedEntry.status !== '??' && selectedEntry.status.charAt(0) !== '.' && !selectedEntry.conflicted
+  const unstagedAvailable = selectedEntry !== undefined && (selectedEntry.status === '??' || selectedEntry.status.charAt(1) !== '.') && !selectedEntry.conflicted
+  const bothModes = stagedAvailable && unstagedAvailable
+
+  const diffFiles = useMemo(() => {
+    if (model === undefined) return []
+    return [...model.staged, ...model.unstaged].filter(entry => !entry.conflicted).map(entry => entry.path)
+  }, [model])
+  const navigate = (delta: number): void => {
+    if (selectedPath === undefined || diffFiles.length === 0) return
+    const index = diffFiles.indexOf(selectedPath)
+    const next = diffFiles[(index + delta + diffFiles.length) % diffFiles.length]
+    if (next !== undefined) operations.select(next, stagedAvailable && !unstagedAvailable ? 'staged' : 'changes')
+  }
 
   let headerContent: ReactElement
   if (status === undefined) {
@@ -86,17 +106,61 @@ export function ChangesTab(): ReactElement {
       </>
     )
   }
-  const line = (kind: 'header' | 'context' | 'add' | 'del', text: string, key: number): ReactElement => (
+
+  const diffLine = (kind: 'header' | 'context' | 'add' | 'del', text: string, oldLine: number | undefined, newLine: number | undefined, key: number): ReactElement => (
     <div key={key} style={{
+      display: 'flex',
       whiteSpace: 'pre',
       fontSize: 11.5,
       fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
       background: kind === 'add' ? 'rgba(46, 160, 67, 0.16)' : kind === 'del' ? 'rgba(248, 81, 73, 0.16)' : kind === 'header' ? palette.inputBorder : 'transparent',
       color: kind === 'header' ? palette.muted : palette.text,
     }}>
-      {(kind === 'add' ? '+ ' : kind === 'del' ? '- ' : '  ') + text}
+      <span style={{ minWidth: 34, textAlign: 'right', paddingRight: 8, color: palette.muted, userSelect: 'none' }}>{oldLine ?? ''}</span>
+      <span style={{ minWidth: 34, textAlign: 'right', paddingRight: 8, color: palette.muted, userSelect: 'none' }}>{newLine ?? ''}</span>
+      <span style={{ flex: 1 }}>{(kind === 'add' ? '+ ' : kind === 'del' ? '- ' : '  ') + text}</span>
     </div>
   )
+
+  const renderDiffPane = (): ReactElement => {
+    if (selectedPath === undefined || selectedEntry === undefined) {
+      return <div style={{ padding: 8, color: palette.muted, fontSize: 12 }}>{t('changes.diffSelectFile')}</div>
+    }
+    if (selectedEntry.conflicted) {
+      return <div style={{ padding: 8, color: '#d29922', fontSize: 12 }}>{t('changes.conflicted')} — {t('changes.diffConflictReadOnly')}</div>
+    }
+    if (selectedDiff === undefined) {
+      return <div style={{ padding: 8, color: palette.muted, fontSize: 12 }}>{t('changes.diffLoading')}</div>
+    }
+    if (selectedDiff.tooLarge) {
+      return <div style={{ padding: 8, color: palette.muted, fontSize: 12 }}>{t('changes.diffTooLarge')}</div>
+    }
+    if (selectedDiff.binary) {
+      return <div style={{ padding: 8, color: palette.muted, fontSize: 12 }}>{t('changes.binaryChanged')}</div>
+    }
+    if (selectedEntry.status === '??' && selectedDiff.diff.trim() === '') {
+      return <div style={{ padding: 8, color: palette.muted, fontSize: 12 }}>{t('changes.untrackedNoDiff')}</div>
+    }
+    if (parsedSelected === undefined || parsedSelected.files.length === 0) {
+      return <div style={{ padding: 8, color: palette.muted, fontSize: 12 }}>{view.mode === 'staged' ? t('changes.noStagedChanges') : t('changes.noUnstagedChanges')}</div>
+    }
+    const file = parsedSelected.files[0]
+    if (file === undefined) {
+      return <div style={{ padding: 8, color: palette.muted, fontSize: 12 }}>{t('changes.noUnstagedChanges')}</div>
+    }
+    return (
+      <div style={{ flex: 1, overflow: 'auto', padding: '4px 0' }}>
+        {file.hunks.map((hunk, hunkIndex) => (
+          <div key={hunkIndex}>
+            {diffLine('header', hunk.header, undefined, undefined, hunkIndex * -1 - 1)}
+            {hunk.lines.map((entry, entryIndex) => diffLine(entry.kind, entry.text, entry.oldLine,
+              entry.newLine, hunkIndex * 100000 + entryIndex))}
+          </div>
+        ))}
+      </div>
+    )
+  }
+
   const actionButton = (entry: GitChangeEntry, action: RowAction, key: number): ReactElement => {
     const pending = ops.pending[entry.path]
     const busy = pending !== undefined
@@ -108,49 +172,48 @@ export function ChangesTab(): ReactElement {
         ? (busy && pending === 'staging' ? t('changes.staging') : t('changes.stage'))
         : (busy && pending === 'unstaging' ? t('changes.unstaging') : t('changes.unstage'))
     return (
-      <div key={key} style={{ display: 'flex', gap: 6, alignItems: 'center', padding: '1px 0', color: palette.text, fontSize: 12 }}>
-        <span style={{ color: palette.muted, minWidth: 20 }}>{statusCategory(entry.status)}</span>
-        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{entry.path}</span>
-        {entry.originalPath !== undefined && <span style={{ color: palette.muted, flexShrink: 0 }}>← {entry.originalPath}</span>}
-        {entry.conflicted && <span style={{ color: '#d29922', flexShrink: 0 }}>{t('changes.conflicted')}</span>}
-        {!entry.insideWorkspace && <span style={{ color: palette.muted, flexShrink: 0, fontSize: 11 }}>{t('changes.outsideWorkspace')}</span>}
-        <span style={{ flex: 1 }} />
-        <button
-          onClick={() => {
-            if (action === 'discard') { setConfirming(entry); return }
-            void (action === 'stage' ? operations.stage(entry.path) : operations.unstage(entry.path))
-          }}
-          disabled={busy || discardBlocked}
-          aria-label={(destructive ? t('changes.discard') : action === 'stage' ? t('changes.stage') : t('changes.unstage')) + ' ' + entry.path}
-          aria-busy={busy}
-          title={destructive ? t('changes.discard') : action === 'stage' ? t('changes.stage') : t('changes.unstage')}
-          style={{ background: 'transparent', border: '1px solid ' + (destructive ? '#f85149' : palette.inputBorder), color: destructive ? '#f85149' : palette.text, borderRadius: 6, fontSize: 11, padding: '1px 8px', cursor: busy || discardBlocked ? 'default' : 'pointer', opacity: busy || discardBlocked ? 0.6 : 1 }}
-        >
-          {label}
-        </button>
-      </div>
+      <button
+        key={key}
+        onClick={(event) => {
+          event.stopPropagation()
+          if (action === 'discard') { setConfirming(entry); return }
+          void (action === 'stage' ? operations.stage(entry.path) : operations.unstage(entry.path))
+        }}
+        disabled={busy || discardBlocked}
+        aria-label={(destructive ? t('changes.discard') : action === 'stage' ? t('changes.stage') : t('changes.unstage')) + ' ' + entry.path}
+        aria-busy={busy}
+        title={destructive ? t('changes.discard') : action === 'stage' ? t('changes.stage') : t('changes.unstage')}
+        style={{ background: 'transparent', border: '1px solid ' + (destructive ? '#f85149' : palette.inputBorder), color: destructive ? '#f85149' : palette.text, borderRadius: 6, fontSize: 11, padding: '1px 8px', cursor: busy || discardBlocked ? 'default' : 'pointer', opacity: busy || discardBlocked ? 0.6 : 1 }}
+      >
+        {label}
+      </button>
     )
   }
-  const plainRow = (entry: GitChangeEntry, key: number): ReactElement => (
-    <div key={key} style={{ display: 'flex', gap: 6, alignItems: 'center', padding: '1px 0', color: palette.text, fontSize: 12 }}>
-      <span style={{ color: palette.muted, minWidth: 20 }}>{statusCategory(entry.status)}</span>
-      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{entry.path}</span>
-      {entry.originalPath !== undefined && <span style={{ color: palette.muted, flexShrink: 0 }}>← {entry.originalPath}</span>}
-      {entry.conflicted && <span style={{ color: '#d29922', flexShrink: 0 }}>{t('changes.conflicted')}</span>}
-      {!entry.insideWorkspace && <span style={{ color: palette.muted, flexShrink: 0, fontSize: 11 }}>{t('changes.outsideWorkspace')}</span>}
-    </div>
-  )
-  const changeRow = (entry: GitChangeEntry, section: 'staged' | 'changes', key: number): ReactElement => {
+  const rowContent = (entry: GitChangeEntry, key: number, section: 'staged' | 'changes'): ReactElement => {
     const actions = actionsFor(entry)
     const actionsForSection = section === 'staged' ? (actions.staged !== undefined ? [actions.staged] : []) : (actions.changes ?? [])
     const warnDirty = section === 'changes' && actions.changes?.includes('stage') === true && stageDirtyWarning(entry, dirtyPaths)
     const discardBlocked = section === 'changes' && discardBlockedReason(entry, dirtyPaths) !== undefined
     const error = ops.errors[entry.path]
+    const selected = entry.path === selectedPath
     return (
-      <div key={key}>
-        {actionsForSection.length > 0
-          ? actionsForSection.map((action, index) => actionButton(entry, action, index))
-          : plainRow(entry, 0)}
+      <div key={key} style={{ background: selected ? palette.inputBorder : 'transparent' }}>
+        <div
+          role="button"
+          tabIndex={0}
+          aria-selected={selected}
+          onClick={() => { operations.select(entry.path, section) }}
+          onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); operations.select(entry.path, section) } }}
+          style={{ display: 'flex', gap: 6, alignItems: 'center', padding: '1px 0', color: palette.text, fontSize: 12, cursor: 'pointer' }}
+        >
+          <span style={{ color: palette.muted, minWidth: 20 }}>{statusCategory(entry.status)}</span>
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{entry.path}</span>
+          {entry.originalPath !== undefined && <span style={{ color: palette.muted, flexShrink: 0 }}>← {entry.originalPath}</span>}
+          {entry.conflicted && <span style={{ color: '#d29922', flexShrink: 0 }}>{t('changes.conflicted')}</span>}
+          {!entry.insideWorkspace && <span style={{ color: palette.muted, flexShrink: 0, fontSize: 11 }}>{t('changes.outsideWorkspace')}</span>}
+          <span style={{ flex: 1 }} />
+          {actionsForSection.map((action, index) => actionButton(entry, action, index))}
+        </div>
         {warnDirty && <div style={{ color: '#d29922', fontSize: 11, padding: '0 0 2px 26px' }}>{t('changes.dirtyStageWarning')}</div>}
         {discardBlocked && <div style={{ color: '#d29922', fontSize: 11, padding: '0 0 2px 26px' }}>{t('changes.discardBlockedDirty')}</div>}
         {error !== undefined && <div style={{ color: '#f85149', fontSize: 11, padding: '0 0 2px 26px' }} title={error.detail}>{errorText(t as (key: string) => string, error)}</div>}
@@ -162,7 +225,7 @@ export function ChangesTab(): ReactElement {
       <div style={{ fontSize: 11, color: palette.muted, textTransform: 'uppercase', letterSpacing: 0.4, padding: '2px 0' }}>{title}</div>
       {rows.length === 0
         ? <div style={{ color: palette.muted, fontSize: 12, padding: '2px 0' }}>{empty}</div>
-        : rows.map((entry, index) => changeRow(entry, sectionKind, index))}
+        : rows.map((entry, index) => rowContent(entry, index, sectionKind))}
     </div>
   )
 
@@ -175,36 +238,45 @@ export function ChangesTab(): ReactElement {
         )}
       </div>
       {model !== undefined && (
-        <div style={{ maxHeight: '40%', overflowY: 'auto', borderBottom: '1px solid ' + palette.inputBorder }}>
+        <div style={{ maxHeight: '34%', overflowY: 'auto', borderBottom: '1px solid ' + palette.inputBorder }}>
           {section(t('changes.staged'), sortChanges(model.staged), t('changes.stagedEmpty'), 'staged')}
           {section(t('changes.changes'), sortChanges([...model.unstaged, ...model.conflicted]), t('changes.empty'), 'changes')}
         </div>
       )}
-      <div style={{ padding: '4px 8px', fontSize: 11.5, color: palette.muted, display: 'flex', gap: 12 }}>
-        <span style={{ color: '#2ea043' }}>{t('changes.added')}: {parsed?.added ?? 0}</span>
-        <span style={{ color: '#f85149' }}>{t('changes.removed')}: {parsed?.removed ?? 0}</span>
-        <span>{t('changes.untracked')}: {model?.untracked.length ?? diff?.untracked?.length ?? 0}</span>
-      </div>
-      <div style={{ flex: 1, overflow: 'auto', padding: '4px 0' }}>
-        {parsed === undefined || parsed.files.length === 0
-          ? <div style={{ padding: 8, color: palette.muted, fontSize: 12 }}>{t('changes.empty')}</div>
-          : parsed.files.map((file, fileIndex) => (
-            <div key={fileIndex} style={{ marginBottom: 8 }}>
-              {line('header', file.header, -fileIndex - 1)}
-              {file.hunks.map((hunk, hunkIndex) => (
-                <div key={hunkIndex}>
-                  {line('header', hunk.header, hunkIndex)}
-                  {hunk.lines.map((entry, entryIndex) => line(entry.kind, entry.text, entryIndex))}
-                </div>
-              ))}
-            </div>
-          ))}
-        {diff?.untracked !== undefined && diff.untracked.length > 0 && (
-          <div>
-            {line('header', t('changes.untracked'), 1000000)}
-            {diff.untracked.map((path, index) => line('context', path, index + 1))}
+      <div style={{ padding: '4px 8px', borderBottom: '1px solid ' + palette.inputBorder, fontSize: 12 }}>
+        {selectedEntry !== undefined ? (
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <strong style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '45%' }}>{selectedEntry.path}</strong>
+            {selectedEntry.originalPath !== undefined && <span style={{ color: palette.muted }}>← {selectedEntry.originalPath}</span>}
+            <span style={{ color: palette.muted }}>{statusCategory(selectedEntry.status)}</span>
+            <span style={{ color: '#2ea043' }}>+{parsedSelected?.added ?? 0}</span>
+            <span style={{ color: '#f85149' }}>-{parsedSelected?.removed ?? 0}</span>
+            {selectedDiff?.binary === true && <span style={{ color: palette.muted }}>{t('changes.binaryChanged')}</span>}
+            <span style={{ flex: 1 }} />
+            {bothModes && (
+              <div role="tablist" aria-label={t('changes.diffMode')} style={{ display: 'flex', border: '1px solid ' + palette.inputBorder, borderRadius: 6, overflow: 'hidden' }}>
+                <button role="tab" aria-selected={view.mode === 'unstaged'} onClick={() => { operations.setMode('unstaged') }} style={{ background: view.mode === 'unstaged' ? palette.input : 'transparent', border: 'none', color: palette.text, fontSize: 11, padding: '2px 10px', cursor: 'pointer' }}>{t('changes.unstaged')}</button>
+                <button role="tab" aria-selected={view.mode === 'staged'} onClick={() => { operations.setMode('staged') }} style={{ background: view.mode === 'staged' ? palette.input : 'transparent', border: 'none', color: palette.text, fontSize: 11, padding: '2px 10px', cursor: 'pointer' }}>{t('changes.staged')}</button>
+              </div>
+            )}
+            <button onClick={() => { navigate(-1) }} disabled={diffFiles.length < 2} aria-label={t('changes.prevFile')} title={t('changes.prevFile')} style={{ background: 'transparent', border: '1px solid ' + palette.inputBorder, color: palette.text, borderRadius: 6, fontSize: 11, padding: '1px 8px', cursor: 'pointer' }}>←</button>
+            <button onClick={() => { navigate(1) }} disabled={diffFiles.length < 2} aria-label={t('changes.nextFile')} title={t('changes.nextFile')} style={{ background: 'transparent', border: '1px solid ' + palette.inputBorder, color: palette.text, borderRadius: 6, fontSize: 11, padding: '1px 8px', cursor: 'pointer' }}>→</button>
+            <button
+              onClick={() => { void openFile(selectedEntry.workspacePath ?? selectedEntry.path) }}
+              disabled={selectedEntry.status.charAt(1) === 'D' && selectedEntry.status.charAt(0) === '.'}
+              aria-label={t('changes.openFile')}
+              title={t('changes.openFile')}
+              style={{ background: 'transparent', border: '1px solid ' + palette.inputBorder, color: palette.text, borderRadius: 6, fontSize: 11, padding: '1px 8px', cursor: 'pointer' }}
+            >
+              {t('changes.openFile')}
+            </button>
           </div>
+        ) : (
+          <div style={{ color: palette.muted, fontSize: 12 }}>{t('changes.diffSelectFile')}</div>
         )}
+      </div>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+        {renderDiffPane()}
       </div>
       {confirming !== undefined && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 1200, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.45)' }}>

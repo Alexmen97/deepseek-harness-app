@@ -146,6 +146,7 @@ export function spawnNodeRuntime(fixture: string): NodeRuntimeHarness {
     revealInPath: async () => {},
     gitStatus: async () => ({ repository: false }),
     gitStageFile: async () => {},
+    gitDiffFile: async () => ({ diff: '', tooLarge: false, binary: false }),
     gitDiscardFile: async () => {},
     gitUnstageFile: async () => {},
     gitStatusV2: async () => ({ repository: false }),

@@ -33,6 +33,7 @@ function fakeBindings(options: { workspace?: string; configured?: boolean } = {}
     revealInPath: vi.fn(async () => {}),
     gitStatus: vi.fn(async () => ({ repository: false })),
     gitStageFile: vi.fn(async () => {}),
+    gitDiffFile: async () => ({ diff: '', tooLarge: false, binary: false }),
     gitDiscardFile: vi.fn(async () => {}),
     gitUnstageFile: vi.fn(async () => {}),
     gitStatusV2: vi.fn(async () => ({ repository: false })),

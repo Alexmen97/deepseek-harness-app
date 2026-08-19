@@ -86,6 +86,8 @@ export interface DesktopHost {
   gitUnstageFile(path: string): Promise<void>
   /** Discard one tracked worktree change (git restore --worktree -- <path>); rejects with DesktopGitError. */
   gitDiscardFile(path: string): Promise<void>
+  /** One per-file diff; cached selects the staged side (git diff --cached). */
+  gitDiffFile(path: string, cached: boolean): Promise<DesktopGitFileDiff>
   /** Reveal the runtime log files in the system viewer. */
   openLogs(): Promise<void>
   /** Open an external URL in the system browser. */
@@ -166,6 +168,15 @@ export interface DesktopGitStatusV2 {
   files?: DesktopGitStatusV2Entry[]
   /** Workspace path relative to the repository root ('' when equal); porcelain paths are repo-root-relative. */
   workspacePrefix?: string
+}
+
+/** One per-file git diff result for the M5C.4 diff viewer. */
+export interface DesktopGitFileDiff {
+  diff: string
+  /** True when the diff exceeds the host cap; the UI shows a localized too-large state. */
+  tooLarge: boolean
+  /** True when git reports binary content; the payload is never rendered. */
+  binary: boolean
 }
 
 /** Typed error from the M5C.2 git mutation commands; the frontend never parses raw git stderr. */

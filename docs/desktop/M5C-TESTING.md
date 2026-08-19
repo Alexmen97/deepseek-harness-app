@@ -64,6 +64,25 @@ The interactive pass of the full flow list (M5C.2 items 1-22 in the milestone br
 
 The interactive discard flows (tracked modified, staged+unstaged, dirty block, deleted restore, cancel/confirm, dash file, subdir containment, no crash, Cmd+Q, no orphan) are scheduled for M5C.5 on a disposable fixture; the semantics are pinned by the automated suites above (honest label: automated only).
 
+## M5C.4 - advanced staged/unstaged diff UX
+
+### Rust (apps/desktop/src-tauri, cargo test)
+
+- `commands::tests::git_diff_file_staged_and_unstaged_sides_of_the_same_file` - mandatory case: HEAD A / index B / worktree C; staged diff shows A->B, unstaged shows B->C (never A->C on either side).
+- `commands::tests::git_diff_file_new_staged_and_untracked_and_deletions` - staged new file renders the full addition (`new file mode`); untracked returns an empty diff (no fake patch); unstaged and staged deletions render the removal without needing the worktree file.
+- `commands::tests::git_diff_file_detects_binary_without_payload` - binary diff detected via the `Binary files ... differ` marker; the payload is flagged and never rendered.
+- `commands::tests::git_diff_file_enforces_workspace_containment` - per-path diff rejects outside-workspace, `../`, and absolute inputs before any git read.
+
+### Vitest (apps/desktop/tests)
+
+- `diff.spec.ts` - line numbers derived from hunk headers (context old/new, addition new-only, deletion old-only) and parseHunkHeader.
+- `changes-core.spec.ts` - select() defaults the mode from the clicked section and loads the per-mode diff; setMode switches without reloading cached diffs; refresh keeps the selection on the same file when it still exists (mode switches when needed) and drops it when the file disappears.
+- Localization: 14 new keys (unstaged, diffMode, noStagedChanges, noUnstagedChanges, binaryChanged, diffTooLarge, prevFile, nextFile, openFile, renameOnly, diffSelectFile, diffLoading, untrackedNoDiff, diffConflictReadOnly) in all seven locales; desktop:i18n:check at 867 keys x 7 locales.
+
+### Manual QA record
+
+The interactive diff flows (row click default modes, selector, prev/next, staged vs unstaged sides, binary, rename, open-file, selection continuity, no stale diff, Cmd+Q, no orphan) are scheduled for M5C.5 on a disposable fixture; the semantics are pinned by the automated suites above (honest label: automated only).
+
 ## CI fix (M5C.2)
 
 - `scripts/prepare-desktop-rust-tests.mjs` now stages the `dsh-desktop-runtime-spawn-helper` placeholder alongside the runtime placeholder, closing the CI Desktop failure (M5B.2/M5C.1) where tauri.conf.json declared the spawn-helper bundle resource but the deterministic staging script did not create it; `check-desktop-rust-resources.mjs` now passes in a clean checkout.

@@ -135,6 +135,13 @@ export function installTauriBindings(): void {
           throw parseGitError(error)
         }
       },
+      gitDiffFile: async (path, cached) => {
+        try {
+          return await invoke('git_diff_file', { path, cached })
+        } catch (error) {
+          throw parseGitError(error)
+        }
+      },
       openLogs: async () => invoke('open_logs'),
       openExternal: async url => invoke('open_external', { url }),
       prefsGet: async key => invoke<string | undefined>('prefs_get', { key }),
