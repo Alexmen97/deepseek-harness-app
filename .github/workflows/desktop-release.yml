@@ -145,6 +145,8 @@ jobs:
         run: cargo test --lib
       - name: Build runtime executable
         run: node --import tsx/esm scripts/build-exe-for-desktop.ts
+      - name: Restore full workspace dependencies
+        run: pnpm install --frozen-lockfile
       - name: Frontend build
         working-directory: apps/desktop
         run: pnpm exec vite build
