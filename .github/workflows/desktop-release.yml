@@ -1,14 +1,26 @@
 name: Desktop release
 
-# Direct GitHub Releases distribution. Tag pushes and manual dispatches
-# produce the signed, notarized, stapled DMG plus checksum and release
-# manifest. Publication is always created as a DRAFT so a maintainer reviews
-# it before it becomes public. A tag release without Developer ID signing
-# fails instead of publishing an unsigned artifact.
+# Two explicit release classes.
+#   production  Developer ID signed, notarized, stapled DMG; publishes as a
+#               DRAFT prerelease from a v* tag so a maintainer reviews it
+#               before it becomes public. Without Developer ID signing and
+#               notarization credentials the build FAILS instead of
+#               publishing an unsigned artifact.
+#   preview     ad-hoc signed, NOT notarized DMG; publishes a GitHub
+#               Pre-release only when explicitly requested (manual dispatch
+#               with dry_run=false and release_kind=preview, or an explicit
+#               v*-preview.* tag). A plain push to main publishes nothing.
 
 on:
   workflow_dispatch:
     inputs:
+      release_kind:
+        description: Release class (preview or production)
+        type: choice
+        options:
+          - preview
+          - production
+        default: preview
       dry_run:
         description: Build and verify without creating a GitHub Release
         type: boolean
@@ -58,9 +70,12 @@ jobs:
     needs: signing-secrets
     runs-on: macos-15
     environment: release
+    env:
+      DESKTOP_PREVIEW_VERSION: 0.1.0-preview.1
     outputs:
       signed: ${{ needs.signing-secrets.outputs.signed }}
       notarized: ${{ needs.signing-secrets.outputs.notarized }}
+      releaseKind: ${{ steps.decide.outputs.kind }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -74,6 +89,42 @@ jobs:
           uname -m
           sw_vers
           node --version
+      - name: Decide release class
+        id: decide
+        env:
+          EVENT: ${{ github.event_name }}
+          REF: ${{ github.ref_name }}
+          DISPATCH_KIND: ${{ inputs.release_kind }}
+        run: |
+          if [ "$EVENT" = "workflow_dispatch" ]; then
+            echo "kind=${DISPATCH_KIND:-preview}" >> "$GITHUB_OUTPUT"
+          elif [[ "$REF" =~ -preview\. ]]; then
+            echo "kind=preview" >> "$GITHUB_OUTPUT"
+          else
+            echo "kind=production" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Decide release metadata
+        id: meta
+        env:
+          KIND: ${{ steps.decide.outputs.kind }}
+          SIGNED: ${{ needs.signing-secrets.outputs.signed }}
+          NOTARIZED_CREDS: ${{ needs.signing-secrets.outputs.notarized }}
+          PREVIEW_VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          if [ "$KIND" = "preview" ]; then
+            echo "version=$PREVIEW_VERSION" >> "$GITHUB_OUTPUT"
+            echo "signing=adhoc" >> "$GITHUB_OUTPUT"
+            echo "notarized=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=" >> "$GITHUB_OUTPUT"
+            if [ "$SIGNED" = "true" ] && [ "$NOTARIZED_CREDS" = "true" ]; then
+              echo "signing=developer-id" >> "$GITHUB_OUTPUT"
+              echo "notarized=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "signing=adhoc" >> "$GITHUB_OUTPUT"
+              echo "notarized=false" >> "$GITHUB_OUTPUT"
+            fi
+          fi
       - run: pnpm install --frozen-lockfile
       - name: Desktop tests
         run: pnpm exec vitest run packages/desktop packages/credentials/credentials-keychain packages/api/gateway packages/api/remotes apps/desktop/tests
@@ -81,6 +132,10 @@ jobs:
         run: pnpm run desktop:i18n:check
       - name: Hardcoded desktop copy scan
         run: pnpm run desktop:hardcoded-strings
+      - name: Stage desktop Rust-test resources
+        run: node scripts/prepare-desktop-rust-tests.mjs
+      - name: Rust-test resource regression check
+        run: node scripts/check-desktop-rust-resources.mjs
       - name: Rust tests
         working-directory: apps/desktop/src-tauri
         run: cargo test --lib
@@ -88,9 +143,16 @@ jobs:
         run: node --import tsx/esm scripts/build-exe-for-desktop.ts
       - name: Build app bundle
         working-directory: apps/desktop
-        run: pnpm exec tauri build
+        env:
+          KIND: ${{ steps.decide.outputs.kind }}
+        run: |
+          if [ "$KIND" = "preview" ]; then
+            pnpm exec tauri build --config "{\"version\":\"${{ steps.meta.outputs.version }}\"}"
+          else
+            pnpm exec tauri build
+          fi
       - name: Import signing certificate
-        if: needs.signing-secrets.outputs.signed == 'true'
+        if: steps.decide.outputs.kind == 'production' && needs.signing-secrets.outputs.signed == 'true'
         env:
           APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
@@ -102,8 +164,11 @@ jobs:
           security unlock-keychain -p "$APPLE_KEYCHAIN_PASSWORD" build.keychain
           security import certificate.p12 -k build.keychain -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
           security set-key-partition-list -S apple-tool:,apple: -s -k "$APPLE_KEYCHAIN_PASSWORD" build.keychain
-      - name: Sign, notarize, staple
-        if: needs.signing-secrets.outputs.signed == 'true'
+      - name: Sign preview app (ad-hoc)
+        if: steps.decide.outputs.kind == 'preview'
+        run: node scripts/sign-desktop.mjs --mode adhoc-hardened
+      - name: Sign, notarize, staple (production)
+        if: steps.decide.outputs.kind == 'production' && needs.signing-secrets.outputs.signed == 'true'
         env:
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
@@ -118,8 +183,8 @@ jobs:
             export APPLE_API_KEY_PATH="$RUNNER_TEMP/AuthKey.p8"
           fi
           node scripts/sign-desktop.mjs --mode developer-id
-      - name: Verify signing identity
-        if: needs.signing-secrets.outputs.signed == 'true'
+      - name: Verify signing identity (production)
+        if: steps.decide.outputs.kind == 'production' && needs.signing-secrets.outputs.signed == 'true'
         env:
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
         run: |
@@ -128,15 +193,32 @@ jobs:
             exit 1
           }
       - name: DMG, checksum, release manifest
+        env:
+          DESKTOP_RELEASE_VERSION: ${{ steps.meta.outputs.version }}
+          DESKTOP_RELEASE_KIND: ${{ steps.decide.outputs.kind }}
+          DESKTOP_SIGNING: ${{ steps.meta.outputs.signing }}
+          DESKTOP_NOTARIZED: ${{ steps.meta.outputs.notarized }}
         run: node scripts/make-desktop-dmg.mjs
+      - name: DMG contents verification
+        env:
+          DESKTOP_RELEASE_VERSION: ${{ steps.meta.outputs.version }}
+        run: node scripts/verify-desktop-dmg.mjs
       - name: SBOM
+        env:
+          DESKTOP_RELEASE_VERSION: ${{ steps.meta.outputs.version }}
         run: pnpm run desktop:sbom
       - name: Release artifact consistency
+        env:
+          DESKTOP_RELEASE_VERSION: ${{ steps.meta.outputs.version }}
         run: node scripts/check-release-consistency.mjs
       - name: Release verification
+        env:
+          DESKTOP_RELEASE_KIND: ${{ steps.decide.outputs.kind }}
+          DESKTOP_SIGNING: ${{ steps.meta.outputs.signing }}
+          DESKTOP_NOTARIZED: ${{ steps.meta.outputs.notarized }}
         run: node scripts/verify-desktop-release.mjs
       - name: Refuse unsigned tag publication
-        if: needs.signing-secrets.outputs.signed != 'true' || needs.signing-secrets.outputs.notarized != 'true'
+        if: steps.decide.outputs.kind == 'production' && (needs.signing-secrets.outputs.signed != 'true' || needs.signing-secrets.outputs.notarized != 'true')
         env:
           EVENT_NAME: ${{ github.event_name }}
           DRY_RUN: ${{ inputs.dry_run }}
@@ -159,7 +241,7 @@ jobs:
 
   publish:
     needs: build
-    if: startsWith(github.ref, 'refs/tags/v') && (github.event_name == 'push' || inputs.dry_run == false)
+    if: startsWith(github.ref, 'refs/tags/v') && (github.event_name == 'push' || inputs.dry_run == false) && !contains(github.ref_name, '-preview.')
     runs-on: macos-15
     environment: release
     permissions:
@@ -204,3 +286,74 @@ jobs:
             --draft \
             --prerelease \
             --generate-notes
+
+  publish-preview:
+    needs: build
+    if: (github.event_name == 'workflow_dispatch' && inputs.dry_run == false && inputs.release_kind == 'preview') || (startsWith(github.ref, 'refs/tags/v') && contains(github.ref_name, '-preview.'))
+    runs-on: macos-15
+    environment: release
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: deepseek-harness-app-release-${{ github.ref_name }}
+          path: dist-exe
+      - name: Preview tag matches preview version
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          if [[ ! "$TAG" =~ ^v.*-preview\. ]]; then
+            echo "::error::Preview publication requires a v*-preview.* tag, got $TAG"
+            exit 1
+          fi
+      - name: SBOM release gate
+        run: |
+          if [ -z "$(ls dist-exe/*-sbom.cdx.json 2>/dev/null)" ]; then
+            echo "::error::No CycloneDX SBOM in the release assets; the publish gate requires one (see docs/project/SUPPLY-CHAIN.md)"
+            exit 1
+          fi
+      - name: Attest release artifacts
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            dist-exe/*.dmg
+            dist-exe/*.dmg.sha256
+            dist-exe/*-release-manifest.json
+            dist-exe/*-sbom.cdx.json
+      - name: Create preview GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REF: ${{ github.ref_name }}
+          DISPATCH: ${{ github.event_name == 'workflow_dispatch' }}
+        run: |
+          tag="v$(node -e 'const fs=require("fs");const f=fs.readdirSync("dist-exe").find(n=>n.endsWith("-release-manifest.json"));process.stdout.write(JSON.parse(fs.readFileSync("dist-exe/"+f,"utf8")).version)')"
+          if [ "$DISPATCH" = "false" ] && [ "$tag" != "v$REF" ]; then
+            echo "::error::Tag $REF does not match the preview manifest version $tag"
+            exit 1
+          fi
+          title="DeepSeek Harness App $tag Public Preview — Unsigned / Not Notarized"
+          notes="$RUNNER_TEMP/preview-notes.md"
+          cat > "$notes" <<'PREVIEW_EOF'
+          ## Public Preview
+
+          macOS Apple Silicon only. No Node required. The app is usable.
+
+          - Signing: ad-hoc
+          - Notarized: no
+          - Gatekeeper: macOS may show a warning on first launch; use System Settings → Privacy & Security → Open Anyway.
+
+          Production notarized builds will be published later.
+          PREVIEW_EOF
+          gh release create "$tag" \
+            dist-exe/*.dmg \
+            dist-exe/*.dmg.sha256 \
+            dist-exe/*-release-manifest.json \
+            dist-exe/*-sbom.cdx.json \
+            --title "$title" \
+            --prerelease \
+            --notes-file "$notes"

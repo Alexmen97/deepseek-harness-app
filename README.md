@@ -32,6 +32,17 @@ DeepSeek Harness App wraps the packaged DeepSeek Harness runtime in a Tauri desk
 
 No Node installation is required.
 
+## Latest Public Preview
+
+Public preview builds are available on the [Releases](https://github.com/Alexmen97/deepseek-harness-app/releases) page. Current public preview builds are NOT Apple-notarized: they are ad-hoc signed, so macOS may show a Gatekeeper warning on first launch.
+
+1. Download the preview .dmg from the Releases page.
+2. Open the DMG and drag Harness Desktop to Applications.
+3. Attempt to launch the app.
+4. If macOS blocks it, open System Settings → Privacy & Security and choose Open Anyway.
+
+Do not disable Gatekeeper globally. Once Apple Developer ID notarized releases exist, this section will distinguish Stable and Preview builds.
+
 ## Requirements
 
 - macOS on Apple Silicon

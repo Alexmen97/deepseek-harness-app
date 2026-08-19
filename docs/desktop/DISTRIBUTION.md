@@ -38,6 +38,15 @@ node scripts/verify-desktop-release.mjs
 
 scripts/make-desktop-dmg.mjs stages Harness Desktop.app beside an Applications alias and builds DeepSeek-Harness-App-v<version>-macOS-arm64.dmg with hdiutil. The mounted layout uses Finder window positions set via AppleScript when available; a failed layout script degrades to the default Finder arrangement, never to a broken DMG.
 
+## Release classes
+
+The release workflow (.github/workflows/desktop-release.yml) supports two explicit classes. A plain push to main never publishes a Release.
+
+- preview: ad-hoc signed, NOT notarized, published only when explicitly requested (manual dispatch with release_kind=preview and dry_run=false, or an explicit v*-preview.* tag) as a GitHub Pre-release titled Public Preview — Unsigned / Not Notarized. Gatekeeper warns on first launch; users choose Open Anyway in System Settings → Privacy & Security.
+- production: Developer ID signed, notarized, stapled, published as a DRAFT prerelease from a v* tag. Without Developer ID and notarization credentials the build fails before publication; it never publishes an unsigned stable release.
+
+The release manifest always states releaseKind, signing, and notarized fields; preview builds declare signing=adhoc and notarized=false. The DMG filename carries the version (v0.1.0-preview.1 for previews) so a preview never overwrites a future production artifact.
+
 ## CI
 
 .github/workflows/desktop.yml runs typecheck, lint, the desktop test suites, Rust tests, the frontend build, the unsigned release verification, and — only when signing secrets exist — the Developer ID path with DMG upload. Secrets are GitHub encrypted secrets referenced by name; logs never print them.

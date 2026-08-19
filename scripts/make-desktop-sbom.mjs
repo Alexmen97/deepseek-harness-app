@@ -26,7 +26,8 @@ import { parse as parseToml } from 'smol-toml'
 
 const root = resolve(import.meta.dirname, '..')
 const read = (rel) => JSON.parse(readFileSync(resolve(root, rel), 'utf8'))
-const version = read('apps/desktop/src-tauri/tauri.conf.json').version
+const confVersion = read('apps/desktop/src-tauri/tauri.conf.json').version
+const version = process.env.DESKTOP_RELEASE_VERSION ?? confVersion
 const project = read('docs/project/project-metadata.json')
 const upstream = read('docs/project/upstream-base.json')
 const buildCommit = (() => {

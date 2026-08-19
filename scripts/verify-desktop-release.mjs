@@ -64,7 +64,12 @@ const cargo = readFileSync(resolve(repo, 'apps/desktop/src-tauri/Cargo.toml'), '
 const crateVersion = cargo.match(/^version = "([^"]+)"/m)?.[1]
 check(conf.version === crateVersion, 'manifest/crate version mismatch')
 
-// Signature state: validate when signed, report ad-hoc otherwise.
+// Signature state: validate when signed, report ad-hoc otherwise. The
+// environment declares the intended release class so a preview build can
+// never be mistaken for a notarized production artifact.
+const releaseKind = process.env.DESKTOP_RELEASE_KIND ?? 'production'
+const signing = process.env.DESKTOP_SIGNING ?? (releaseKind === 'preview' ? 'adhoc' : 'developer-id')
+const notarized = (process.env.DESKTOP_NOTARIZED ?? (releaseKind === 'preview' ? 'false' : 'true')) === 'true'
 const signed = (() => {
   try {
     execFileSync('codesign', ['--verify', '--strict', '--verbose=2', appPath], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
@@ -76,6 +81,10 @@ const signed = (() => {
 if (signed) {
   const detail = execFileSync('codesign', ['-dv', '--verbose=2', appPath], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
   console.log('verify-desktop-release: signed bundle:\n' + detail)
+  if (releaseKind === 'preview') {
+    check(!notarized, 'preview verification ran with notarized=true')
+    console.log('verify-desktop-release: PREVIEW release - ad-hoc signed, NOT notarized, Gatekeeper will warn on first launch')
+  }
   try {
     const assessment = execFileSync('spctl', ['--assess', '--type', 'execute', '--verbose=2', appPath], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
     console.log('verify-desktop-release: Gatekeeper assessment:\n' + assessment)

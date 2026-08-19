@@ -37,18 +37,11 @@ jobs:
       - name: Rust tests
         working-directory: apps/desktop/src-tauri
         run: |
-          # tauri-build validates declared bundle resources even for unit tests;
-          # generate_context! also reads the icon, and the real SEA is staged
-          # only by the tauri build's beforeBuildCommand, so generate the icon
-          # and stage the tracked runtime config plus a sidecar placeholder to
-          # satisfy the dev-profile resource checks here.
-          node ../../../scripts/desktop-icon.mjs
-          mkdir -p resources/sidecar
-          mkdir -p resources/runtime
-          if [ ! -e resources/sidecar/dsh-desktop-runtime ]; then
-            touch resources/sidecar/dsh-desktop-runtime
-          fi
-          cp ../../../packages/desktop/desktop-runtime/runtime/cordis.yml resources/runtime/cordis.yml
+          # tauri-build validates declared bundle resources even for unit tests
+          # and generate_context! reads the icon; the deterministic staging
+          # script and the resource regression check own that contract.
+          node ../../../scripts/prepare-desktop-rust-tests.mjs
+          node ../../../scripts/check-desktop-rust-resources.mjs
           cargo test --lib
       - name: Frontend build
         working-directory: apps/desktop
@@ -71,14 +64,35 @@ jobs:
         run: node --import tsx/esm scripts/build-exe-for-desktop.ts
       - name: Build app bundle
         working-directory: apps/desktop
-        run: pnpm exec tauri build
-      - name: Release verification (unsigned)
+        run: pnpm exec tauri build --config '{"version":"0.1.0-preview.1"}'
+      - name: Sign preview app (ad-hoc)
+        run: node scripts/sign-desktop.mjs --mode adhoc-hardened
+      - name: Release verification (preview)
+        env:
+          DESKTOP_RELEASE_KIND: preview
+          DESKTOP_SIGNING: adhoc
+          DESKTOP_NOTARIZED: "false"
         run: node scripts/verify-desktop-release.mjs
+      - name: DMG, checksum, release manifest (preview)
+        env:
+          DESKTOP_RELEASE_VERSION: 0.1.0-preview.1
+          DESKTOP_RELEASE_KIND: preview
+          DESKTOP_SIGNING: adhoc
+          DESKTOP_NOTARIZED: "false"
+        run: node scripts/make-desktop-dmg.mjs
+      - name: DMG contents verification (preview)
+        env:
+          DESKTOP_RELEASE_VERSION: 0.1.0-preview.1
+        run: node scripts/verify-desktop-dmg.mjs
       - name: Upload development artifact
         uses: actions/upload-artifact@v4
         with:
-          name: DeepSeek-Harness-App-dev-arm64
-          path: apps/desktop/src-tauri/target/release/bundle/macos/Harness Desktop.app
+          name: DeepSeek-Harness-App-preview-arm64
+          path: |
+            apps/desktop/src-tauri/target/release/bundle/macos/Harness Desktop.app
+            dist-exe/*.dmg
+            dist-exe/*.dmg.sha256
+            dist-exe/*-release-manifest.json
 
   release-signed:
     needs: checks

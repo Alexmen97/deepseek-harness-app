@@ -32,6 +32,17 @@ DeepSeek Harness App 将打包后的 DeepSeek Harness 运行时封装在 Tauri �
 
 无需安装 Node。
 
+## 最新公共预览版
+
+公共预览版可从 [Releases](https://github.com/Alexmen97/deepseek-harness-app/releases) 页面获取。当前公共预览版未经 Apple 公证：它们采用 ad-hoc 签名，因此 macOS 在首次启动时可能会显示 Gatekeeper 警告。
+
+1. 从 Releases 页面下载预览版 .dmg。
+2. 打开 DMG，将 Harness Desktop 拖入应用程序。
+3. 尝试启动应用。
+4. 如果 macOS 阻止启动，请打开系统设置 → 隐私与安全性并选择仍要打开。
+
+请勿全局禁用 Gatekeeper。待 Apple Developer ID 公证版本发布后，本部分将区分稳定版与预览版。
+
 ## 需求
 
 - Apple Silicon 的 macOS

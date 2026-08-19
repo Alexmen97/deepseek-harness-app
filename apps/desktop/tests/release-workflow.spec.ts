@@ -21,7 +21,10 @@ interface WorkflowJob {
 }
 interface ReleaseWorkflow {
   on: {
-    workflow_dispatch: { inputs: { dry_run: { default: boolean } } }
+    workflow_dispatch: { inputs: {
+      release_kind: { default: string; options: string[] }
+      dry_run: { default: boolean }
+    } }
     push: { tags: string[] }
   }
   jobs: Record<string, WorkflowJob>
@@ -86,5 +89,36 @@ describe('desktop release workflow', () => {
   it('uploads the SBOM with the public assets', () => {
     const upload = job('build').steps?.find(step => step.uses === 'actions/upload-artifact@v4')
     expect(upload?.with?.path).toContain('dist-exe/*-sbom.cdx.json')
+  })
+
+  it('defaults manual dispatches to preview and dry run', () => {
+    const inputs = workflow.on.workflow_dispatch.inputs
+    expect(inputs.release_kind.default).toBe('preview')
+    expect(inputs.dry_run.default).toBe(true)
+  })
+
+  it('publishes previews only from explicit dispatch or preview tags', () => {
+    const publishPreview = job('publish-preview')
+    expect(publishPreview.if ?? '').toContain('inputs.dry_run == false')
+    expect(publishPreview.if ?? '').toContain('inputs.release_kind == \'preview\'')
+    expect(publishPreview.if ?? '').toContain('-preview.')
+  })
+
+  it('keeps production publication fail-closed without signing', () => {
+    const refuse = job('build').steps?.find(step => step.name === 'Refuse unsigned tag publication')
+    expect(refuse?.if ?? '').toContain("kind == 'production'")
+    expect(refuse?.if ?? '').toContain("signed != 'true'")
+    expect(refuse?.if ?? '').toContain("notarized != 'true'")
+  })
+
+  it('signs preview builds ad-hoc and never claims notarization', () => {
+    const names = (job('build').steps ?? []).map(step => step.name ?? '')
+    expect(names).toContain('Sign preview app (ad-hoc)')
+  })
+
+  it('requires the preview manifest version for preview tags', () => {
+    const pp = job('publish-preview')
+    const gate = (pp.steps ?? []).find(step => step.name === 'Preview tag matches preview version')
+    expect(gate?.run ?? '').toContain('v*-preview.')
   })
 })

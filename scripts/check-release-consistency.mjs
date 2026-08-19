@@ -19,7 +19,7 @@ const check = (condition, message) => { if (!condition) failures.push(message) }
 const conf = read('apps/desktop/src-tauri/tauri.conf.json')
 const upstream = read('docs/project/upstream-base.json')
 const project = read('docs/project/project-metadata.json')
-const version = conf.version
+const version = process.env.DESKTOP_RELEASE_VERSION ?? conf.version
 const expectedDmg = project.artifactPrefix + '-v' + version + '-macOS-arm64.dmg'
 const expectedSbom = project.artifactPrefix + '-v' + version + '-sbom.cdx.json'
 const dist = resolve(root, 'dist-exe')
@@ -50,6 +50,13 @@ if (existsSync(resolve(dist, manifestName))) {
   check(manifest.dmgFilename === expectedDmg, 'manifest DMG filename drift')
   check(manifest.sha256 === hash, 'manifest checksum drift')
   check(manifest.sbomFilename === expectedSbom, 'manifest SBOM filename drift')
+  check(manifest.releaseKind === 'preview' || manifest.releaseKind === 'production', 'manifest releaseKind drift')
+  check(typeof manifest.notarized === 'boolean', 'manifest notarized must be boolean')
+  check(manifest.signing === 'adhoc' || manifest.signing === 'developer-id', 'manifest signing drift')
+  if (manifest.releaseKind === 'preview') {
+    check(manifest.signing === 'adhoc', 'preview manifest must declare adhoc signing')
+    check(manifest.notarized === false, 'preview manifest must declare notarized=false')
+  }
   const head = (() => { try { return execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim() } catch { return 'unknown' } })()
   check(manifest.buildCommit === head, 'manifest build commit drift: ' + manifest.buildCommit + ' vs ' + head)
   check(typeof manifest.buildTimestamp === 'string' && manifest.buildTimestamp.length > 0, 'manifest build timestamp missing')

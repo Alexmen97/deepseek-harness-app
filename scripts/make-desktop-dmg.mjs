@@ -18,7 +18,22 @@ if (!existsSync(appPath)) {
 }
 
 const conf = JSON.parse(readFileSync(resolve(repo, 'apps/desktop/src-tauri/tauri.conf.json'), 'utf8'))
-const version = conf.version
+const version = process.env.DESKTOP_RELEASE_VERSION ?? conf.version
+const releaseKind = process.env.DESKTOP_RELEASE_KIND ?? 'production'
+const signing = process.env.DESKTOP_SIGNING ?? (releaseKind === 'preview' ? 'adhoc' : 'developer-id')
+const notarized = (process.env.DESKTOP_NOTARIZED ?? (releaseKind === 'preview' ? 'false' : 'true')) === 'true'
+if (releaseKind !== 'preview' && releaseKind !== 'production') {
+  console.error('make-desktop-dmg: DESKTOP_RELEASE_KIND must be preview or production, got ' + releaseKind)
+  process.exit(1)
+}
+if (signing !== 'adhoc' && signing !== 'developer-id') {
+  console.error('make-desktop-dmg: DESKTOP_SIGNING must be adhoc or developer-id, got ' + signing)
+  process.exit(1)
+}
+if (releaseKind === 'preview' && (signing !== 'adhoc' || notarized !== false)) {
+  console.error('make-desktop-dmg: preview releases must be adhoc signed and not notarized')
+  process.exit(1)
+}
 const dmgName = 'DeepSeek-Harness-App-v' + version + '-macOS-arm64.dmg'
 const dmgPath = resolve(repo, 'dist-exe', dmgName)
 const stage = resolve(repo, 'dist-exe', '.dmg-stage')
@@ -68,6 +83,9 @@ const manifest = {
   schemaVersion: 1,
   version,
   desktopProtocol: 1,
+  releaseKind,
+  notarized,
+  signing,
   harnessVersion: upstream.version,
   harnessCommit: upstream.commit,
   platform: 'macos',
