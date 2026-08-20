@@ -157,14 +157,28 @@ describe('DesktopApiClient carrier', () => {
     api.dispose()
   })
 
-  it('ends open streams when the generation changes', async () => {
+  it('wakes a parked stream when the generation changes', async () => {
     const fake = fakeTransport()
     installDesktopBindings(fake.bindings)
     const api = new DesktopApiClient(fake.bindings.transport)
     const events = api.events.mux({}, new AbortController().signal)
     const iterator = events[Symbol.asyncIterator]()
+    const next = iterator.next()
     fake.pushState({ state: 'running', generation: 3 })
-    await expect(iterator.next()).resolves.toMatchObject({ done: true })
+    await expect(next).resolves.toMatchObject({ done: true })
+    api.dispose()
+  })
+
+  it('wakes a parked stream when its caller aborts', async () => {
+    const fake = fakeTransport()
+    installDesktopBindings(fake.bindings)
+    const api = new DesktopApiClient(fake.bindings.transport)
+    const abort = new AbortController()
+    const events = api.events.mux({}, abort.signal)
+    const iterator = events[Symbol.asyncIterator]()
+    const next = iterator.next()
+    abort.abort()
+    await expect(next).resolves.toMatchObject({ done: true })
     api.dispose()
   })
 

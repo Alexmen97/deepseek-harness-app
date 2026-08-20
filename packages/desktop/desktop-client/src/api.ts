@@ -177,13 +177,18 @@ export class DesktopApiClient extends AbstractApiClient {
   ): AsyncIterable<RpcRequest<F>> {
     const buffer: DesktopRuntimeFrame[] = []
     let wake: (() => void) | undefined
-    const handler = (frame: DesktopRuntimeFrame): void => {
-      if (frame.stream !== stream) return
-      buffer.push(frame)
+    const release = (): void => {
       wake?.()
       wake = undefined
     }
+    const handler = (frame: DesktopRuntimeFrame): void => {
+      if (frame.stream !== stream) return
+      buffer.push(frame)
+      release()
+    }
     const controller = new AbortController()
+    signal.addEventListener('abort', release, { once: true })
+    controller.signal.addEventListener('abort', release, { once: true })
     this.streamControllers.add(controller)
     this.frameHandlers.add(handler)
     onOpen?.()
@@ -210,6 +215,8 @@ export class DesktopApiClient extends AbstractApiClient {
           await new Promise<void>((resolve) => { wake = resolve })
         }
       } finally {
+        signal.removeEventListener('abort', release)
+        controller.signal.removeEventListener('abort', release)
         streamControllers.delete(controller)
         frameHandlers.delete(handler)
       }
