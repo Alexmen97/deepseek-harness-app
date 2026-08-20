@@ -71,7 +71,7 @@ jobs:
     runs-on: macos-15
     environment: release
     env:
-      DESKTOP_PREVIEW_VERSION: 0.1.0-preview.1
+      DESKTOP_PREVIEW_VERSION: 0.1.0-preview.2
     outputs:
       signed: ${{ needs.signing-secrets.outputs.signed }}
       notarized: ${{ needs.signing-secrets.outputs.notarized }}
