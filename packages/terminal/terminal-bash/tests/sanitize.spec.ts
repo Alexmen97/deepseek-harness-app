@@ -2,10 +2,10 @@ import { describe, expect, it } from 'vitest'
 import { normalizeTerminalText, TerminalSanitizer } from '@deepseek-ai/dsh-terminal-bash/src/sanitize.ts'
 
 describe('TerminalSanitizer', () => {
-  it('removes split CSI and owned OSC prompt markers', () => {
+  it('preserves split SGR while removing owned OSC prompt markers', () => {
     const sanitizer = new TerminalSanitizer(64)
     expect(sanitizer.push('red\x1b[3')).toEqual({ text: 'red', prompt: false })
-    expect(sanitizer.push('1m text\x1b[0m\r\n')).toEqual({ text: ' text\n', prompt: false })
+    expect(sanitizer.push('1m text\x1b[0m\r\n')).toEqual({ text: '\x1b[31m text\x1b[0m\n', prompt: false })
     expect(sanitizer.push('\x1b]133;')).toEqual({ text: '', prompt: false })
     expect(sanitizer.push('D;0\x07dsh> ')).toEqual({ text: 'dsh> ', prompt: true, promptTail: 'dsh> ' })
   })

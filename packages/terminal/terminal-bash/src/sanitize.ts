@@ -17,9 +17,9 @@ export interface SanitizedChunk {
 }
 
 /**
- * Remove CSI/OSC/short escape sequences while preserving split-sequence carry.
- * Full terminal emulation is deliberately deferred; ordinary line output and
- * the private prompt marker are the supported contract.
+ * Preserve SGR styling while removing other CSI, OSC, and short escape sequences.
+ * Full terminal emulation is deliberately deferred; ordinary line output,
+ * SGR color/style, and the private prompt marker are the supported contract.
  */
 export class TerminalSanitizer {
   private pending = ''
@@ -92,6 +92,8 @@ export class TerminalSanitizer {
           index = escape
           break
         }
+        // SGR is presentation-only and xterm renders it without changing cursor state.
+        if (this.pending[end] === 'm') appendText(this.pending.slice(escape, end + 1))
         index = end + 1
         continue
       }

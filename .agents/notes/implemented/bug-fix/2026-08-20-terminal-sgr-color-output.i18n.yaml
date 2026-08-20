@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-08-20-terminal-sgr-color-output.md
+2026-08-20-terminal-sgr-color-output.md: 705ca2301e4a21fd808c1fc58b244b477596e874
+2026-08-20-terminal-sgr-color-output.zh.md: 602202c622af6cc01b35e4d996cb7ab5139b162b
