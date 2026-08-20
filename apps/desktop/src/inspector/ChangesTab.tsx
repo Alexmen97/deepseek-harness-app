@@ -7,7 +7,7 @@ import type { ReactElement } from 'react'
 import { desktopBindings, type DesktopGitError } from '@deepseek-ai/dsh-desktop-client'
 import { useDesktopStrings, desktopPalette, useDesktopAppearance } from '@deepseek-ai/dsh-desktop-client/src/ui/strings'
 import { parseDiff, statusCategory } from './diff.ts'
-import { actionsFor, discardBlockedReason, hasStagedSide, sortChanges, splitGitStatus, stageDirtyWarning, type GitChangeEntry } from './git-model.ts'
+import { actionsFor, diffNavigationPaths, discardBlockedReason, hasStagedSide, sortChanges, splitGitStatus, stageDirtyWarning, type GitChangeEntry } from './git-model.ts'
 import { createChangesCore, type ChangesCore } from './changes-core.ts'
 import { onFilesInvalidated } from './filesync.ts'
 import { getEditorState, openFile, useEditorState } from './editorStore.ts'
@@ -82,8 +82,7 @@ export function ChangesTab(): ReactElement {
   const bothModes = stagedAvailable && unstagedAvailable
 
   const diffFiles = useMemo(() => {
-    if (model === undefined) return []
-    return [...model.staged, ...model.unstaged].filter(entry => !entry.conflicted).map(entry => entry.path)
+    return diffNavigationPaths(model)
   }, [model])
   const navigate = (delta: number): void => {
     if (selectedPath === undefined || diffFiles.length === 0) return

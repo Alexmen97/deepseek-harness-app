@@ -79,7 +79,9 @@ export function makeStubFs(initial: Record<string, string> = {}): {
  */
 export function stubApiProxy(overrides: {
   sessions?: Partial<ApiProxy['sessions']>
+  subagents?: Partial<ApiProxy['subagents']>
   workspace?: Partial<ApiProxy['workspace']>
+  skills?: Partial<ApiProxy['skills']>
   credentials?: Partial<ApiProxy['credentials']>
   llm?: Partial<ApiProxy['llm']>
   respond?: ApiProxy['respond']
@@ -95,10 +97,10 @@ export function stubApiProxy(overrides: {
   })
   return {
     sessions: { ...domain(), ...overrides.sessions } as ApiProxy['sessions'],
-    subagents: domain() as unknown as ApiProxy['subagents'],
+    subagents: { ...domain(), ...overrides.subagents } as ApiProxy['subagents'],
     host: domain() as unknown as ApiProxy['host'],
     workspace: { ...domain(), ...overrides.workspace } as ApiProxy['workspace'],
-    skills: domain() as unknown as ApiProxy['skills'],
+    skills: { ...domain(), ...overrides.skills } as ApiProxy['skills'],
     agentPresets: domain() as unknown as ApiProxy['agentPresets'],
     events: {
       mux: overrides.mux ?? (async function * () {}),
@@ -154,6 +156,7 @@ export async function makeServerHarness(options: {
   llmProviders?: string[]
   keychain?: boolean
   fs?: ReturnType<typeof makeStubFs>['fs']
+  agents?: { get(id: string): unknown }
 } = {}): Promise<ServerHarness> {
   const ctx = new Context()
   ctx.provide('apiProxy', options.api ?? stubApiProxy({}))
@@ -162,7 +165,7 @@ export async function makeServerHarness(options: {
   if (options.questions === true) ctx.provide('userQuestions', {})
   if (options.attachments === true) ctx.provide('attachments', {})
   ctx.provide('fs', options.fs ?? makeStubFs().fs)
-  ctx.provide('agents', { get: () => ({}) })
+  ctx.provide('agents', options.agents ?? { get: () => ({}) })
   ctx.provide('terminals', {
     spawn: async () => { throw new FsError('no backend', 'FS_IO_ERROR') },
     startSend: () => { throw new Error('not served') },

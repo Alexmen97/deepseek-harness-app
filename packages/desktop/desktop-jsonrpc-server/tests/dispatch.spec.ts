@@ -26,6 +26,40 @@ describe('served route dispatch', () => {
     expect(line.result).toMatchObject({ rpcId: 'r1', result: { ok: true, value: { items: [] } } })
   })
 
+  it('routes subagent.list through the ApiProxy for the shared subagent catalog', async () => {
+    const list = vi.fn(async (request: { rpcId: unknown; payload: unknown }) => ({
+      rpcId: request.rpcId,
+      result: { ok: true as const, value: { entries: [], parentAvailable: true } },
+    }))
+    harness = await makeServerHarness({ api: stubApiProxy({ subagents: { list } as never }) })
+    await initializeHarness(harness)
+
+    harness.request('subagent.list', { rpcId: 'subagents', payload: { parentSessionId: 's-1' } }, 'subagent-list-request')
+    const line = await harness.waitResponse('subagent-list-request')
+    expect(list).toHaveBeenCalledWith(expect.objectContaining({ payload: { parentSessionId: 's-1' } }))
+    expect(line.result).toMatchObject({
+      rpcId: 'subagents',
+      result: { ok: true, value: { entries: [], parentAvailable: true } },
+    })
+  })
+
+  it('routes skill.list through the ApiProxy for the shared skill menu', async () => {
+    const list = vi.fn(async (request: { rpcId: unknown; payload: unknown }) => ({
+      rpcId: request.rpcId,
+      result: { ok: true as const, value: { skills: [{ name: 'review', description: 'Review code', modelInvocable: true }] } },
+    }))
+    harness = await makeServerHarness({ api: stubApiProxy({ skills: { list } as never }) })
+    await initializeHarness(harness)
+
+    harness.request('skill.list', { rpcId: 'skills', payload: { sessionId: 's-1' } }, 'skill-list-request')
+    const line = await harness.waitResponse('skill-list-request')
+    expect(list).toHaveBeenCalledWith(expect.objectContaining({ payload: { sessionId: 's-1' } }))
+    expect(line.result).toMatchObject({
+      rpcId: 'skills',
+      result: { ok: true, value: { skills: [{ name: 'review', modelInvocable: true }] } },
+    })
+  })
+
   it('routes standard credential methods through the ApiProxy', async () => {
     const describe = vi.fn(async (request: { rpcId: unknown; payload: unknown }) => ({
       rpcId: request.rpcId,
@@ -96,6 +130,13 @@ describe('served route dispatch', () => {
     harness.request('no.such.method', {})
     const line = await harness.waitLine()
     expect(line.error).toMatchObject({ message: 'method not found: no.such.method' })
+  })
+
+  it('accepts terminal cleanup after a runtime generation lost its live agent', async () => {
+    harness = await makeServerHarness({ agents: { get: () => undefined } })
+    await initializeHarness(harness)
+    harness.request('desktop.terminal.kill', { sessionId: 'stale-session', terminalId: 'stale-pty' }, 'stale-terminal-kill')
+    expect((await harness.waitResponse('stale-terminal-kill')).result).toEqual({ killed: false })
   })
 
   it('forwards respond to the ApiProxy and returns its receipt', async () => {

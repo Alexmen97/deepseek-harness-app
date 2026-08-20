@@ -341,6 +341,14 @@ export class LocalPtySession implements TerminalBackendSession {
 
   async signal(signal: TerminalSignal): Promise<TerminalSignalResult> {
     if (this.closing) throw new Error('PTY session is closing')
+    if (signal === 'SIGINT') {
+      const foreground = await this.terminal.inspectForeground()
+      if (foreground === undefined) throw new Error(`cannot resolve foreground process group for terminal ${this.pid}`)
+      // Ctrl+C is terminal input: the line discipline signals the foreground
+      // group and Bash receives the interrupt that redraws its prompt.
+      await this.terminal.write('\x03')
+      return { delivered: true, targetPgid: foreground.processGroupId }
+    }
     const targetPgid = await this.terminal.signalForeground(signal)
     return { delivered: true, targetPgid }
   }

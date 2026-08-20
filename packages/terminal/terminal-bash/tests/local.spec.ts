@@ -171,7 +171,7 @@ describe('terminal-bash real shell', () => {
   }, 10_000)
 
   it('signals a foreground command and kills a TERM-ignoring background descendant', async () => {
-    const { ctx, agent } = await harness('danger-full-access')
+    const { ctx, agent } = await harness('workspace-write')
     const created = await ctx.terminals.spawn(agent, { type: 'shell' })
 
     const foreground = ctx.terminals.startSend(agent, created.sessionId, { text: 'sleep 60', submit: true })

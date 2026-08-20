@@ -121,6 +121,12 @@ export function splitGitStatus(status: DesktopGitStatusV2 | undefined): GitStatu
   return { staged, unstaged, untracked, conflicted }
 }
 
+/** Ordered unique paths for diff navigation when a file appears in both sections. */
+export function diffNavigationPaths(model: GitStatusModel | undefined): string[] {
+  if (model === undefined) return []
+  return [...new Set([...model.staged, ...model.unstaged].filter(entry => !entry.conflicted).map(entry => entry.path))]
+}
+
 /**
  * The actions a row offers, derived only from the porcelain state: never
  * from the visual section that happens to render the row. Conflicted rows

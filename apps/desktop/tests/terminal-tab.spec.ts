@@ -26,6 +26,22 @@ describe('M5C.5 terminal PTY-leak guard', () => {
     expect(SRC).not.toContain('termRef.current?.write(result.motd)')
   })
 
+  it('forwards the xterm Ctrl+C input through the terminal signal RPC', () => {
+    expect(SRC).toContain("data === '\\x03'")
+    expect(SRC).toContain("signal: 'SIGINT'")
+    expect(SRC).not.toContain("term.write('^C')")
+  })
+
+  it('erases buffered input locally for either terminal Backspace code', () => {
+    expect(SRC).toContain("data === '\\x7f' || data === '\\b'")
+    expect(SRC).toContain("term.write('\\b \\b')")
+  })
+
+  it('releases an explicitly closed PTY before an inspector remount', () => {
+    expect(SRC).toContain('ownedTerminalRef.current = undefined')
+    expect(SRC).toContain('spawnedRef.current = undefined')
+  })
+
   it('keeps the xterm instance through inspector-state renders', () => {
     expect(SRC).toContain('}, [appearance])')
     expect(SRC).not.toContain('}, [palette, sessionId, spawned])')

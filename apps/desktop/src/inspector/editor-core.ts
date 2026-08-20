@@ -63,6 +63,14 @@ const patch = (state: EditorState, path: string, next: Partial<EditorBuffer>): E
   return { ...state, buffers: { ...state.buffers, [path]: { ...buffer, ...next } } }
 }
 
+/** A local draft stays protected until ctx.fs records a successful replacement. */
+const needsSave = (buffer: EditorBuffer | undefined): boolean => (
+  buffer?.status === 'dirty'
+  || buffer?.status === 'saving'
+  || buffer?.status === 'conflict'
+  || buffer?.status === 'error'
+)
+
 export function createEditorCore(io: EditorIo, maxBytes: number): EditorCore {
   let state: EditorState = { visible: false, activePath: undefined, buffers: {}, order: [] }
   const listeners = new Set<() => void>()
@@ -96,7 +104,7 @@ export function createEditorCore(io: EditorIo, maxBytes: number): EditorCore {
       return true
     },
     setContent(path, content) {
-      const buffer = state.buffers[path]
+      const buffer: EditorBuffer | undefined = state.buffers[path]
       if (buffer === undefined || buffer.status === 'readonly' || buffer.status === 'deleted') return
       const next: EditorBuffer = { ...buffer, content, status: 'dirty', message: undefined }
       state = { ...state, buffers: { ...state.buffers, [path]: next } }
@@ -104,7 +112,7 @@ export function createEditorCore(io: EditorIo, maxBytes: number): EditorCore {
     },
     async save(path) {
       const buffer = state.buffers[path]
-      if (buffer === undefined || buffer.status === 'readonly' || buffer.status === 'deleted') return
+      if (buffer === undefined || buffer.status === 'readonly' || buffer.status === 'deleted' || buffer.status === 'saving') return
       const mark = (next: Partial<EditorBuffer>): void => {
         state = patch(state, path, next)
         emit()
@@ -130,7 +138,7 @@ export function createEditorCore(io: EditorIo, maxBytes: number): EditorCore {
       for (const path of this.dirtyPaths()) {
         await this.save(path)
         const after = state.buffers[path]
-        if (after === undefined || after.status === 'dirty' || after.status === 'conflict' || after.status === 'error') {
+        if (needsSave(after)) {
           conflicted.push(path)
         }
       }
@@ -146,9 +154,12 @@ export function createEditorCore(io: EditorIo, maxBytes: number): EditorCore {
       emit()
     },
     async reconcile(path) {
+      const stat = await io.stat(path)
+      // A watcher invalidation can overlap this buffer's own FsVersion-guarded
+      // save. Use the buffer that exists after stat resolves, not the state
+      // observed before it, so the save's returned version wins its own event.
       const buffer = state.buffers[path]
       if (buffer === undefined) return
-      const stat = await io.stat(path)
       if (stat.kind === 'absent') {
         // A transient absence (no active session yet, e.g. right after a
         // runtime reconnect) cannot decide deletion; retry later.
@@ -197,10 +208,10 @@ export function createEditorCore(io: EditorIo, maxBytes: number): EditorCore {
       emit()
     },
     hasDirtyBuffers() {
-      return state.order.some(path => state.buffers[path]?.status === 'dirty')
+      return state.order.some(path => needsSave(state.buffers[path]))
     },
     dirtyPaths() {
-      return state.order.filter(path => state.buffers[path]?.status === 'dirty')
+      return state.order.filter(path => needsSave(state.buffers[path]))
     },
     close(path) {
       const next = Object.fromEntries(Object.entries(state.buffers).filter(([key]) => key !== path))

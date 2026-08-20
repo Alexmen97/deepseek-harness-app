@@ -1,6 +1,16 @@
 /** Terminal presentation helpers for the line-oriented desktop transport. */
 
 /**
+ * Tell whether a streamed terminal frame belongs to the currently displayed PTY.
+ * @param outputTerminalId - PTY identity attached to the streamed frame.
+ * @param activeTerminalId - PTY identity currently owned by the tab.
+ * @returns Whether the frame may be rendered into the xterm viewport.
+ */
+export function isActiveTerminalOutput(outputTerminalId: string, activeTerminalId: string | undefined): boolean {
+  return outputTerminalId === activeTerminalId
+}
+
+/**
  * Consume the PTY echo of a line xterm already rendered while it was typed.
  * @param text - Newly streamed, line-normalized PTY output.
  * @param pendingEcho - Prefix expected from the terminal driver after submission.

@@ -1158,15 +1158,39 @@ describe('LocalPtySession bounds, signals, and teardown', () => {
     expect(tiny.read({ offset: 0, count: 1 }).text).toBe('')
   })
 
-  it('signals verified groups and refuses unresolved or shell-targeted hard kills', async () => {
+  it('delivers Ctrl+C through the PTY and keeps direct delivery for other signals', async () => {
     const terminal = new FakeTerminal()
     const inspector = new FakeInspector()
     const session = makeSession(terminal, inspector, config())
     expect(await session.signal('SIGINT')).toEqual({ delivered: true, targetPgid: 456 })
+    expect(terminal.writes).toEqual(['\x03'])
+    expect(inspector.groups).toEqual([])
+    expect(await session.signal('SIGTERM')).toEqual({ delivered: true, targetPgid: 456 })
+    expect(inspector.groups).toEqual([[456, 'SIGTERM']])
     inspector.pgid = terminal.pid
     await expect(session.signal('SIGKILL')).rejects.toThrow('terminate the terminal session')
     inspector.pgid = undefined
-    await expect(session.signal('SIGTERM')).rejects.toThrow('cannot resolve')
+    await expect(session.signal('SIGINT')).rejects.toThrow('cannot resolve')
+  })
+
+  it('settles an active send after an in-band Ctrl+C redraws the prompt', async () => {
+    vi.useFakeTimers()
+    const terminal = new FakeTerminal()
+    const inspector = new FakeInspector()
+    const session = makeSession(terminal, inspector, config())
+    await initialize(session, terminal)
+
+    const operation = session.startSend({ text: 'sleep 30', submit: true })
+    await Promise.resolve()
+    await Promise.resolve()
+    inspector.pgid = 789
+    expect(await session.signal('SIGINT')).toEqual({ delivered: true, targetPgid: 789 })
+    expect(terminal.writes).toEqual(['sleep 30\r', '\x03'])
+
+    inspector.pgid = 456
+    terminal.emitData('^C\r\n\x1b]133;D;0\x07dsh> ')
+    await vi.advanceTimersByTimeAsync(10)
+    await expect(operation.done).resolves.toMatchObject({ waitReason: 'stdin_read', viewport: '^C\ndsh> ' })
   })
 
   it('closes idempotently and rejects new signals', async () => {

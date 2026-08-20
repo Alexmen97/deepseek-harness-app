@@ -32,6 +32,12 @@ describe('M4 inspector store projection', () => {
     expect(ended.subagents['main']?.[0]?.state).toBe('completed')
   })
 
+  it('replaces output when a reopened terminal has a new PTY identity', () => {
+    const closed = applyInspectorFrame(EMPTY_INSPECTOR, frame(3, { sessionId: 's-1', terminalId: 'pty-1', kind: 'settled', text: 'old command\ndsh> ', status: { kind: 'running' } }))
+    const reopened = applyInspectorFrame(closed, frame(3, { sessionId: 's-1', terminalId: 'pty-2', kind: 'delta', text: 'dsh> ' }))
+    expect(reopened.terminals['s-1']).toEqual({ terminalId: 'pty-2', output: 'dsh> ', status: undefined })
+  })
+
   it('appends terminal deltas and final viewport output, then discards state on a generation change', () => {
     const first = applyInspectorFrame(EMPTY_INSPECTOR, frame(3, { sessionId: 's-1', terminalId: 'pty-1', kind: 'delta', text: 'hello ' }))
     const settled = applyInspectorFrame(first, frame(3, { sessionId: 's-1', terminalId: 'pty-1', kind: 'settled', text: 'world', status: { kind: 'running' } }))

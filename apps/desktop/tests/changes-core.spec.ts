@@ -230,6 +230,21 @@ describe('M5C.2 changes operations core', () => {
     expect(core.getView().mode).toBe('staged')
   })
 
+  it('invalidates a selected diff when a refreshed Git snapshot changes it', async () => {
+    const host = fakeHost()
+    let body = 'first snapshot'
+    host.gitDiffFile = async () => ({ diff: body, tooLarge: false, binary: false })
+    const core = createChangesCore(host)
+    await core.refresh()
+    core.select('a.txt', 'changes')
+    await Promise.resolve()
+    expect(core.getView().diffs['a.txt']?.unstaged?.diff).toBe('first snapshot')
+    body = 'second snapshot'
+    await core.refresh()
+    await Promise.resolve()
+    expect(core.getView().diffs['a.txt']?.unstaged?.diff).toBe('second snapshot')
+  })
+
   it('keeps selection on the same file across sections after refresh', async () => {
     const host = fakeHost()
     const core = createChangesCore(host)

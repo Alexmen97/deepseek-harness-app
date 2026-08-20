@@ -105,5 +105,8 @@ describe('M5B unsaved-changes quit guard', () => {
     await saveAllAndQuit()
     expect(getQuitGuardState().saveFailed).toBe(true)
     expect(host.calls).not.toContain('quit-now')
+    // A stale save preserves the draft in conflict state, so it remains
+    // protected while the user chooses Reload or Keep Editing.
+    expect(host.calls).toEqual(['arm:true'])
   })
 })

@@ -62,6 +62,49 @@ describe('M5B editor reconcile semantics', () => {
     expect(core.getState().buffers['a.ts']?.status).toBe('dirty')
   })
 
+  it('keeps a successful save clean when its watcher invalidation finishes afterward', async () => {
+    const files: Record<string, FakeFile | undefined> = { 'a.ts': { content: 'one', version: 1 } }
+    let delayStat = false
+    let releaseStat: (() => void) | undefined
+    let releaseWrite: (() => void) | undefined
+    let signalStat: (() => void) | undefined
+    let signalWrite: (() => void) | undefined
+    const statGate = new Promise<void>((resolve) => { releaseStat = resolve })
+    const writeGate = new Promise<void>((resolve) => { releaseWrite = resolve })
+    const statStarted = new Promise<void>((resolve) => { signalStat = resolve })
+    const writeStarted = new Promise<void>((resolve) => { signalWrite = resolve })
+    const base = fakeIo(files)
+    const io: EditorIo = {
+      stat: async (path) => {
+        if (delayStat) {
+          signalStat?.()
+          await statGate
+        }
+        return base.stat(path)
+      },
+      read: async path => base.read(path),
+      write: async (path, content) => {
+        files[path] = { content, version: 2 }
+        signalWrite?.()
+        await writeGate
+        return { ok: true, version: 'v2' }
+      },
+    }
+    const core = createEditorCore(io, 512 * 1024)
+    await core.openFile('a.ts')
+    core.setContent('a.ts', 'saved draft')
+    delayStat = true
+    const saving = core.save('a.ts')
+    await writeStarted
+    const reconciling = core.reconcile('a.ts')
+    await statStarted
+    releaseWrite?.()
+    await saving
+    releaseStat?.()
+    await reconciling
+    expect(core.getState().buffers['a.ts']).toMatchObject({ content: 'saved draft', version: 'v2', status: 'clean', message: undefined })
+  })
+
   it('keep changes dismisses the conflict but the next save is still stale-rejected', async () => {
     const files: Record<string, FakeFile | undefined> = { 'a.ts': { content: 'one', version: 1 } }
     const core = createEditorCore(fakeIo(files), 512 * 1024)

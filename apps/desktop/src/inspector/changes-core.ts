@@ -78,10 +78,11 @@ export function createChangesCore(host: ChangesHost, options: ChangesCoreOptions
   let diff: DesktopGitDiff | undefined
   let ops: ChangesOpsState = { pending: {}, errors: {} }
   let view: ChangesViewState = EMPTY_VIEW
+  let diffGeneration = 0
   const listeners = new Set<() => void>()
   const emit = (): void => { for (const listener of listeners) listener() }
 
-  const loadDiff = async (path: string, mode: DiffMode): Promise<void> => {
+  const loadDiff = async (path: string, mode: DiffMode, generation = diffGeneration): Promise<void> => {
     const cached = view.diffs[path]?.[mode]
     if (cached !== undefined) return
     const loadingKey = path + ':' + mode
@@ -90,12 +91,14 @@ export function createChangesCore(host: ChangesHost, options: ChangesCoreOptions
     emit()
     try {
       const result = await host.gitDiffFile(path, mode === 'staged')
+      if (generation !== diffGeneration) return
       view = {
         ...view,
         loading: { ...view.loading, [loadingKey]: false },
         diffs: { ...view.diffs, [path]: { ...view.diffs[path], [mode]: result } },
       }
     } catch {
+      if (generation !== diffGeneration) return
       view = { ...view, loading: { ...view.loading, [loadingKey]: false } }
     }
     emit()
@@ -135,6 +138,8 @@ export function createChangesCore(host: ChangesHost, options: ChangesCoreOptions
     ])
     status = nextStatus
     diff = nextDiff
+    diffGeneration += 1
+    view = { ...view, diffs: {}, loading: {} }
     // Selection continuity: keep the same logical file when it still exists
     // in another section; fall back to the empty state otherwise.
     const selected = view.selectedPath

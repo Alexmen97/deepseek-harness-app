@@ -170,6 +170,15 @@ const ECHO_SERVER: &str = r#"while IFS= read -r line; do
   esac
 done"#;
 
+/// Holds a long request while serving a later interrupt request immediately.
+const CONCURRENT_REQUEST_SERVER: &str = r#"while IFS= read -r line; do
+  case "$line" in
+    *desktop.shutdown*) exit 0 ;;
+    *slow*) (sleep 1; echo '{"jsonrpc":"2.0","id":"slow","result":{"ok":true}}') & ;;
+    *signal*) echo '{"jsonrpc":"2.0","id":"signal","result":{"ok":true}}' ;;
+  esac
+done"#;
+
 const CRASH_ONCE: &str = r#"if [ ! -f "$DSH_HOME/crashed" ]; then
   touch "$DSH_HOME/crashed"
   exit 7
@@ -319,6 +328,35 @@ fn fragmented_and_multiple_frames_in_one_read() {
     assert!(wait_until(Duration::from_secs(5), || manager.state() == RuntimeState::Running));
     let response = manager.request("req-1".into(), manager.generation(), "echo".into(), String::new(), json!({})).unwrap();
     assert_eq!(response.get("ok"), Some(&json!(true)));
+    manager.stop().unwrap();
+}
+
+#[test]
+fn asynchronous_request_wait_does_not_block_a_later_interrupt() {
+    let _env = ENV_LOCK.lock().unwrap();
+    let dir = TestDir::new("concurrent-request");
+    let (manager, host) = setup_manager(&dir, CONCURRENT_REQUEST_SERVER, None, None);
+    manager.start().unwrap();
+    assert!(wait_until(Duration::from_secs(5), || manager.state() == RuntimeState::Running));
+
+    let slow_manager = manager.as_ref().clone();
+    let generation = manager.generation();
+    let slow = std::thread::spawn(move || {
+        tauri::async_runtime::block_on(slow_manager.request_async("slow".into(), generation, "slow".into(), String::new(), json!({})))
+    });
+    assert!(wait_until(Duration::from_secs(1), || host.has_event("request slow generation=")));
+
+    let started = Instant::now();
+    let signal = tauri::async_runtime::block_on(manager.request_async(
+        "signal".into(),
+        manager.generation(),
+        "signal".into(),
+        String::new(),
+        json!({}),
+    ));
+    assert_eq!(signal.unwrap().get("ok"), Some(&json!(true)));
+    assert!(started.elapsed() < Duration::from_millis(500));
+    assert_eq!(slow.join().unwrap().unwrap().get("ok"), Some(&json!(true)));
     manager.stop().unwrap();
 }
 

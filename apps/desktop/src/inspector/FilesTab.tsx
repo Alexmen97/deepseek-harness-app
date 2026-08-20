@@ -6,6 +6,7 @@ import { desktopBindings, type DesktopFsEntry } from '@deepseek-ai/dsh-desktop-c
 import { useDesktopStrings, desktopPalette, useDesktopAppearance } from '@deepseek-ai/dsh-desktop-client/src/ui/strings'
 import { HighlightedLine } from './highlight.tsx'
 import { openFile } from './editorStore.ts'
+import { previewReadErrorKey } from './files-core.ts'
 import { onFilesInvalidated } from './filesync.ts'
 
 export function FilesTab(): ReactElement {
@@ -64,9 +65,9 @@ export function FilesTab(): ReactElement {
       try {
         setContent(await host.fsReadText(entry.path))
         setError(undefined)
-      } catch {
+      } catch (readError) {
         setContent('')
-        setError(t('files.binary'))
+        setError(t(previewReadErrorKey(readError)))
       }
       return
     }

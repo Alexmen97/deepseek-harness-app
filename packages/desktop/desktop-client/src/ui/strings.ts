@@ -88,6 +88,7 @@ export type DesktopStringKey =
   | 'files.empty'
   | 'files.searchPlaceholder'
   | 'files.binary'
+  | 'files.tooLarge'
   | 'files.back'
   | 'files.loadError'
   | 'files.previewEmpty'
@@ -268,6 +269,7 @@ export const en: Record<DesktopStringKey, string> = {
   'files.empty': 'No files',
   'files.searchPlaceholder': 'Search in file…',
   'files.binary': 'Binary files cannot be previewed',
+  'files.tooLarge': 'File is too large to preview',
   'files.back': 'Back',
   'files.loadError': 'Could not load the file',
   'files.previewEmpty': 'Select a file to preview',
@@ -449,6 +451,7 @@ export const it: Record<DesktopStringKey, string> = {
   'files.empty': 'Nessun file',
   'files.searchPlaceholder': 'Cerca nel file…',
   'files.binary': 'Il file binario non può essere mostrato',
+  'files.tooLarge': 'Il file è troppo grande per l’anteprima',
   'files.back': 'Indietro',
   'files.loadError': 'Impossibile caricare il file',
   'files.previewEmpty': 'Seleziona un file per l’anteprima',
@@ -630,6 +633,7 @@ export const zh: Record<DesktopStringKey, string> = {
   'files.empty': '暂无文件',
   'files.searchPlaceholder': '在文件中搜索…',
   'files.binary': '二进制文件无法预览',
+  'files.tooLarge': '文件过大，无法预览',
   'files.back': '返回',
   'files.loadError': '无法加载文件',
   'files.previewEmpty': '选择一个文件进行预览',
@@ -810,6 +814,7 @@ export const es: Record<DesktopStringKey, string> = {
   'files.empty': 'Sin archivos',
   'files.searchPlaceholder': 'Buscar en el archivo…',
   'files.binary': 'El archivo binario no se puede mostrar',
+  'files.tooLarge': 'El archivo es demasiado grande para previsualizar',
   'files.back': 'Atrás',
   'files.loadError': 'No se pudo cargar el archivo',
   'files.previewEmpty': 'Selecciona un archivo para previsualizar',
@@ -990,6 +995,7 @@ export const fr: Record<DesktopStringKey, string> = {
   'files.empty': 'Aucun fichier',
   'files.searchPlaceholder': 'Rechercher dans le fichier…',
   'files.binary': 'Le fichier binaire ne peut pas être affiché',
+  'files.tooLarge': 'Le fichier est trop volumineux pour être prévisualisé',
   'files.back': 'Retour',
   'files.loadError': 'Impossible de charger le fichier',
   'files.previewEmpty': 'Sélectionnez un fichier pour l’aperçu',
@@ -1170,6 +1176,7 @@ export const de: Record<DesktopStringKey, string> = {
   'files.empty': 'Keine Dateien',
   'files.searchPlaceholder': 'In der Datei suchen…',
   'files.binary': 'Die Binärdatei kann nicht angezeigt werden',
+  'files.tooLarge': 'Die Datei ist für die Vorschau zu groß',
   'files.back': 'Zurück',
   'files.loadError': 'Datei konnte nicht geladen werden',
   'files.previewEmpty': 'Wählen Sie eine Datei für die Vorschau',
@@ -1350,6 +1357,7 @@ export const ptBr: Record<DesktopStringKey, string> = {
   'files.empty': 'Nenhum arquivo',
   'files.searchPlaceholder': 'Pesquisar no arquivo…',
   'files.binary': 'O arquivo binário não pode ser exibido',
+  'files.tooLarge': 'O arquivo é grande demais para visualização',
   'files.back': 'Voltar',
   'files.loadError': 'Não foi possível carregar o arquivo',
   'files.previewEmpty': 'Selecione um arquivo para visualizar',

@@ -143,6 +143,18 @@ pub struct RuntimeManager<H: DesktopHost = AppHandle> {
     quit_guard: Arc<AtomicBool>,
 }
 
+impl<H: DesktopHost> Clone for RuntimeManager<H> {
+    fn clone(&self) -> Self {
+        Self {
+            host: self.host.clone(),
+            inner: self.inner.clone(),
+            generation: self.generation.clone(),
+            pending: self.pending.clone(),
+            quit_guard: self.quit_guard.clone(),
+        }
+    }
+}
+
 struct Inner {
     state: RuntimeState,
     /// Owned while a generation is alive; the monitor reaps it on exit.
@@ -524,6 +536,21 @@ impl<H: DesktopHost> RuntimeManager<H> {
                 Err("request timed out or the runtime exited".into())
             }
         }
+    }
+
+    /// Await one stdio RPC without occupying the Tauri IPC executor.
+    pub async fn request_async(
+        &self,
+        request_id: String,
+        generation: u64,
+        method: String,
+        rpc_id: String,
+        payload: Value,
+    ) -> Result<Value, String> {
+        let manager = self.clone();
+        tauri::async_runtime::spawn_blocking(move || manager.request(request_id, generation, method, rpc_id, payload))
+            .await
+            .map_err(|error| format!("runtime request task failed: {error}"))?
     }
 
     fn shared(&self) -> SharedManager<H> {

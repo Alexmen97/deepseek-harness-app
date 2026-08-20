@@ -74,7 +74,7 @@ pub fn runtime_status(manager: State<'_, RuntimeManager>) -> RuntimeStatus {
 
 /// One unary JSON-RPC round trip over the runtime's stdio.
 #[tauri::command]
-pub fn rpc_request(
+pub async fn rpc_request(
     manager: State<'_, RuntimeManager>,
     request_id: String,
     generation: u64,
@@ -82,7 +82,7 @@ pub fn rpc_request(
     rpc_id: String,
     payload: Value,
 ) -> Result<Value, String> {
-    manager.request(request_id, generation, method, rpc_id, payload)
+    manager.request_async(request_id, generation, method, rpc_id, payload).await
 }
 
 /// Append one desktop log line (the same bounded store as runtime stderr).
@@ -429,7 +429,7 @@ fn read_text_file(root: &Path, path: &str) -> Result<String, String> {
         return Err("expected a file, got a directory".into());
     }
     if metadata.len() > FS_READ_MAX_BYTES as u64 {
-        return Err(format!("file exceeds the {}-byte preview limit", FS_READ_MAX_BYTES));
+        return Err(format!("FS_TOO_LARGE: file exceeds the {}-byte preview limit", FS_READ_MAX_BYTES));
     }
     let bytes = std::fs::read(&target).map_err(|error| format!("cannot read file: {error}"))?;
     if bytes.iter().take(8192).any(|byte| *byte == 0) {
@@ -1189,12 +1189,14 @@ mod tests {
     }
 
     #[test]
-    fn text_preview_rejects_binary_and_missing_files() {
+    fn text_preview_distinguishes_binary_and_size_limited_files() {
         let root = fixture_root("preview");
         fs::write(root.join("ok.txt"), "hello world").unwrap();
         fs::write(root.join("bin.dat"), [0u8, 1, 2, 3]).unwrap();
+        fs::write(root.join("large.txt"), vec![b'a'; FS_READ_MAX_BYTES + 1]).unwrap();
         assert_eq!(read_text_file(&root, "ok.txt").unwrap(), "hello world");
         assert!(read_text_file(&root, "bin.dat").is_err());
+        assert!(read_text_file(&root, "large.txt").unwrap_err().starts_with("FS_TOO_LARGE:"));
         assert!(read_text_file(&root, "missing.txt").is_err());
     }
 

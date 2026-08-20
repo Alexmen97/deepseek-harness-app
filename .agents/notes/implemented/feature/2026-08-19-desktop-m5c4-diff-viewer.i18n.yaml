@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-08-19-desktop-m5c4-diff-viewer.md
-2026-08-19-desktop-m5c4-diff-viewer.md: 0fa8980380debe7ad6c13aee05d0cf098ba44680
-2026-08-19-desktop-m5c4-diff-viewer.zh.md: 03b6d284eafb73750c93bacffd0da1573a142575
+2026-08-19-desktop-m5c4-diff-viewer.md: c8a28dd09753020ba643d73adf0b016fb7ae182b
+2026-08-19-desktop-m5c4-diff-viewer.zh.md: 4d5ae850d39bced44e5bf44794a3a93caa4885a6

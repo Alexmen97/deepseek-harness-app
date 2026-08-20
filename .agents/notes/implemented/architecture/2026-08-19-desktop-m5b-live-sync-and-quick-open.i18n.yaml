@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-08-19-desktop-m5b-live-sync-and-quick-open.md
-2026-08-19-desktop-m5b-live-sync-and-quick-open.md: 76d730b9f050309f3c9be12ca69cbe00bd6e5d97
-2026-08-19-desktop-m5b-live-sync-and-quick-open.zh.md: 4f9a7b4c544faf662c5e7ce2749aa79f1a1148ea
+2026-08-19-desktop-m5b-live-sync-and-quick-open.md: 329384b2174aa5a12be5120e8e0bfb83b78cd17a
+2026-08-19-desktop-m5b-live-sync-and-quick-open.zh.md: 35c7854e58d878edd75403aeac1befb51b782296

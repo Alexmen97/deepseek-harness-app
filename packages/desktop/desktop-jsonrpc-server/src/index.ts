@@ -72,6 +72,8 @@ import {
   settingsReplaceRequestSchema,
   settingsUpdateRequestSchema,
 } from '@deepseek-ai/dsh-host-apiproxy/api/settings.schema'
+import { skillListRequestSchema } from '@deepseek-ai/dsh-host-apiproxy/api/skills.schema'
+import { subagentListRequestSchema } from '@deepseek-ai/dsh-host-apiproxy/api/subagents.schema'
 import {
   credentialsDescribeRequestSchema,
   credentialsSetRequestSchema,
@@ -149,8 +151,10 @@ type ServedMethod =
   | 'session.prompt'
   | 'session.selectModel'
   | 'session.cancel'
+  | 'subagent.list'
   | 'workspace.list'
   | 'workspace.create'
+  | 'skill.list'
   | 'llm.providers'
   | 'llm.models'
   | 'settings.describe'
@@ -207,6 +211,10 @@ const SERVED_ROUTES: { [K in ServedMethod]: ServedRoute<K> } = {
     schema: sessionCancelRequestSchema,
     invoke: (api, rpcId, payload) => api.sessions.cancel({ rpcId, payload }),
   },
+  'subagent.list': {
+    schema: subagentListRequestSchema,
+    invoke: (api, rpcId, payload) => api.subagents.list({ rpcId, payload }),
+  },
   'workspace.list': {
     schema: workspaceListRequestSchema,
     invoke: (api, rpcId, payload) => api.workspace.list({ rpcId, payload }),
@@ -214,6 +222,10 @@ const SERVED_ROUTES: { [K in ServedMethod]: ServedRoute<K> } = {
   'workspace.create': {
     schema: workspaceCreateRequestSchema,
     invoke: (api, rpcId, payload) => api.workspace.create({ rpcId, payload }),
+  },
+  'skill.list': {
+    schema: skillListRequestSchema,
+    invoke: (api, rpcId, payload) => api.skills.list({ rpcId, payload }),
   },
   'llm.providers': {
     schema: llmProvidersRequestSchema,
@@ -497,7 +509,10 @@ export function apply(ctx: Context, config: JsonRpcConfig = {}): void {
 
   const terminalKill = async (raw: unknown) => {
     const { sessionId, terminalId } = terminalRef(raw)
-    const agent = terminalAgent(sessionId)
+    const agent = ctx.agents.get(sessionId as SessionId)
+    // A generation restart has already destroyed its live agent and PTYs.
+    // Treat the old frontend cleanup as idempotent instead of rejecting it.
+    if (agent === undefined) return { killed: false }
     const killed = await ctx.terminals.kill(agent, wireId(terminalId), 'user request')
     return { killed }
   }

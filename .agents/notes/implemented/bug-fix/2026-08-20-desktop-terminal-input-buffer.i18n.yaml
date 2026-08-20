@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-08-20-desktop-terminal-input-buffer.md
-2026-08-20-desktop-terminal-input-buffer.md: 7be0dbbfa43e048f9e6fdd029bef9661aea3e26e
-2026-08-20-desktop-terminal-input-buffer.zh.md: eb3ed00d4f1e3db3bd9aad8ed8b27895aa03a3db
+2026-08-20-desktop-terminal-input-buffer.md: 62e0a11950ac49aa3026e54f6c2d6c855526c0d9
+2026-08-20-desktop-terminal-input-buffer.zh.md: c1a017c461e4341cc134986818e7f8cc2c6e595b

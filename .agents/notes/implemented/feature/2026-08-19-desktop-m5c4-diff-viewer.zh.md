@@ -12,7 +12,7 @@ M5C.1-M5C.3 可以暂存、取消暂存和放弃，但 Changes 面板只显示�
 
 宿主新增 `git_diff_file(path, cached)`，一个窄化命令，运行 `git diff -- <path>` 或 `git diff --cached -- <path>`（固定 argv、强制 `--`、先做包含校验）。结果携带 diff 文本以及 `tooLarge`（保留现有 512 KiB 上限并报告，绝不静默截断）和 `binary` 标志（从 `Binary files ... differ` / `GIT binary patch` 标记检测；二进制负载绝不渲染）。git 2.50.1 上的 fixture 证据确定了语义：对 index B / worktree C，`--cached` 显示 A->B，普通显示 B->C（绝不在任一侧显示 A->C）；暂存新文件渲染完整新增；未跟踪路径返回空 diff（UI 显示“未跟踪文件 — 没有可用的 Git diff”，不伪造补丁）；删除无需工作区文件即可渲染；按路径的 rename diff 显示为 new-file，因为 git diff 不按路径输出 rename 元数据——porcelain v2 的 originalPath 仍然是 rename 元数据来源，这一点已记录为限制。
 
-前端核心持有仅会话的选择状态：`select(path, from)` 根据点击的区段默认模式（Staged Changes -> staged，Changes -> unstaged），`setMode` 切换选择器，按模式 diff 缓存去重请求。每次 git 操作后的刷新在文件仍存在于另一个区段时保留同一个逻辑文件（必要时切换模式），文件完全消失时丢弃选择——绝不留下死空白面板。diff 面板通过现有统一解析器渲染，并扩展为从 hunk 头（`@@ -a,b +c,d @@`）派生的旧/新行号、当两侧都存在时的紧凑 Staged|Unstaged 选择器、在变更文件间的前一/下一导航、Open File 操作（对未暂存删除禁用）、本地化空状态（无暂存/未暂存更改、过大、二进制、冲突只读）以及仅重命名状态。diff 内容保持不受信任的文本，通过 React 文本节点渲染；不影响 CSP。
+前端核心持有仅会话的选择状态：`select(path, from)` 根据点击的区段默认模式（Staged Changes -> staged，Changes -> unstaged），`setMode` 切换选择器，按模式 diff 缓存在同一个 Git 快照内去重请求。每次刷新都会使该缓存失效，并拒绝旧 generation 的结果，因此外部工作区或索引更改不会让所选模式显示陈旧补丁。每次 git 操作后的刷新在文件仍存在于另一个区段时保留同一个逻辑文件（必要时切换模式），文件完全消失时丢弃选择——绝不留下死空白面板。diff 面板通过现有统一解析器渲染，并扩展为从 hunk 头（`@@ -a,b +c,d @@`）派生的旧/新行号、当两侧都存在时的紧凑 Staged|Unstaged 选择器、在唯一变更路径之间的前一/下一导航、Open File 操作（对未暂存删除禁用）、本地化空状态（无暂存/未暂存更改、过大、二进制、冲突只读）以及仅重命名状态。diff 内容保持不受信任的文本，通过 React 文本节点渲染；不影响 CSP。
 
 ## 备选方案
 

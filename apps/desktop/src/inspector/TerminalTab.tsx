@@ -10,7 +10,7 @@ import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
 import { useDesktopStrings, desktopPalette, useDesktopAppearance } from '@deepseek-ai/dsh-desktop-client/src/ui/strings'
-import { consumeLocalTerminalEcho } from './terminal-core.ts'
+import { consumeLocalTerminalEcho, isActiveTerminalOutput } from './terminal-core.ts'
 import { terminalRequest, useInspectorState } from './store.ts'
 
 interface SpawnedTerminal {
@@ -36,6 +36,7 @@ export function TerminalTab(): ReactElement {
   const inputBufferRef = useRef('')
   const pendingLocalEchoRef = useRef('')
   const [spawned, setSpawned] = useState<SpawnedTerminal | undefined>(undefined)
+  const lastLength = useRef(0)
   const [error, setError] = useState<string | undefined>(undefined)
   const sessionId = state.activeSessionId
   sessionRef.current = sessionId
@@ -43,6 +44,7 @@ export function TerminalTab(): ReactElement {
 
   useEffect(() => {
     if (containerRef.current === null || termRef.current !== undefined) return
+    const container = containerRef.current
     const term = new Terminal({
       convertEol: true,
       cursorBlink: true,
@@ -53,7 +55,7 @@ export function TerminalTab(): ReactElement {
     })
     const fit = new FitAddon()
     term.loadAddon(fit)
-    term.open(containerRef.current)
+    term.open(container)
     fit.fit()
     termRef.current = term
     fitRef.current = fit
@@ -71,12 +73,19 @@ export function TerminalTab(): ReactElement {
       }
       if (data === '\x03') {
         inputBufferRef.current = ''
-        term.write('^C')
+        pendingLocalEchoRef.current = ''
         void terminalRequest('desktop.terminal.signal', { sessionId: currentSession, terminalId: currentTerminal.terminalId, signal: 'SIGINT' }).catch(() => {})
         return
       }
-      if (data === '\x7f') inputBufferRef.current = inputBufferRef.current.slice(0, -1)
-      else inputBufferRef.current += data
+      if (data === '\x7f' || data === '\b') {
+        if (inputBufferRef.current.length > 0) {
+          inputBufferRef.current = inputBufferRef.current.slice(0, -1)
+          // This UI batches a line for the PTY, so xterm must erase locally.
+          term.write('\b \b')
+        }
+        return
+      }
+      inputBufferRef.current += data
       term.write(data)
     })
     const onResize = (): void => {
@@ -158,9 +167,11 @@ export function TerminalTab(): ReactElement {
   }, [sessionId])
 
   const output = sessionId !== undefined ? state.terminals[sessionId] : undefined
-  const lastLength = useRef(0)
   useEffect(() => {
-    if (output === undefined) return
+    if (output === undefined || !isActiveTerminalOutput(output.terminalId, spawned?.terminalId)) {
+      lastLength.current = 0
+      return
+    }
     const delta = output.output.slice(lastLength.current)
     if (delta.length > 0) {
       const visible = consumeLocalTerminalEcho(delta, pendingLocalEchoRef.current)
@@ -178,6 +189,8 @@ export function TerminalTab(): ReactElement {
     void terminalRequest('desktop.terminal.kill', { sessionId, terminalId: spawned.terminalId }).then(() => {
       inputBufferRef.current = ''
       pendingLocalEchoRef.current = ''
+      ownedTerminalRef.current = undefined
+      spawnedRef.current = undefined
       setSpawned(undefined)
       termRef.current?.clear()
     }).catch(() => {})
