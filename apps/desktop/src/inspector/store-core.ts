@@ -68,7 +68,8 @@ export function applyInspectorFrame(current: InspectorState, frame: InspectorFra
     const sessionId = payload.sessionId
     const previous = state.terminals[sessionId] ?? { terminalId: payload.terminalId, output: '', status: undefined }
     const entry = { ...previous, terminalId: payload.terminalId }
-    if (payload.kind === 'delta' && typeof payload.text === 'string') entry.output += payload.text
+    // Fast commands can settle before the polling pump emits a delta; their final viewport is still output.
+    if (typeof payload.text === 'string') entry.output += payload.text
     if (payload.kind === 'settled') entry.status = payload.status
     return { ...state, terminals: { ...state.terminals, [sessionId]: entry } }
   }

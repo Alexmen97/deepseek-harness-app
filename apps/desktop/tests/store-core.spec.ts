@@ -32,10 +32,12 @@ describe('M4 inspector store projection', () => {
     expect(ended.subagents['main']?.[0]?.state).toBe('completed')
   })
 
-  it('appends terminal deltas and discards state on a generation change', () => {
-    const first = applyInspectorFrame(EMPTY_INSPECTOR, frame(3, { sessionId: 's-1', terminalId: 'pty-1', kind: 'delta', text: 'hello' }))
-    expect(first.terminals['s-1']?.output).toBe('hello')
-    const second = applyInspectorFrame(first, frame(4, { type: 'session/subscribed', sessionId: 's-1', lastSeq: 0 }))
+  it('appends terminal deltas and final viewport output, then discards state on a generation change', () => {
+    const first = applyInspectorFrame(EMPTY_INSPECTOR, frame(3, { sessionId: 's-1', terminalId: 'pty-1', kind: 'delta', text: 'hello ' }))
+    const settled = applyInspectorFrame(first, frame(3, { sessionId: 's-1', terminalId: 'pty-1', kind: 'settled', text: 'world', status: { kind: 'running' } }))
+    expect(settled.terminals['s-1']?.output).toBe('hello world')
+    expect(settled.terminals['s-1']?.status).toEqual({ kind: 'running' })
+    const second = applyInspectorFrame(settled, frame(4, { type: 'session/subscribed', sessionId: 's-1', lastSeq: 0 }))
     expect(second.terminals).toEqual({})
     expect(second.generation).toBe(4)
   })
