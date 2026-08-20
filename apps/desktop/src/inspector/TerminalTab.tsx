@@ -1,7 +1,7 @@
 /**
  * M4 integrated terminal: xterm.js frontend over the desktop terminal RPC.
- * The WebView renders typed text locally and sends the complete line only
- * when Enter submits it to the PTY.
+ * The WebView renders typed text locally, suppresses its matching PTY echo,
+ * and sends the complete line only when Enter submits it to the PTY.
  */
 
 import { useEffect, useRef, useState } from 'react'
@@ -10,6 +10,7 @@ import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
 import { useDesktopStrings, desktopPalette, useDesktopAppearance } from '@deepseek-ai/dsh-desktop-client/src/ui/strings'
+import { consumeLocalTerminalEcho } from './terminal-core.ts'
 import { terminalRequest, useInspectorState } from './store.ts'
 
 interface SpawnedTerminal {
@@ -33,6 +34,7 @@ export function TerminalTab(): ReactElement {
   const sessionRef = useRef<string | undefined>(undefined)
   const spawnedRef = useRef<SpawnedTerminal | undefined>(undefined)
   const inputBufferRef = useRef('')
+  const pendingLocalEchoRef = useRef('')
   const [spawned, setSpawned] = useState<SpawnedTerminal | undefined>(undefined)
   const [error, setError] = useState<string | undefined>(undefined)
   const sessionId = state.activeSessionId
@@ -42,7 +44,7 @@ export function TerminalTab(): ReactElement {
   useEffect(() => {
     if (containerRef.current === null || termRef.current !== undefined) return
     const term = new Terminal({
-      convertEol: false,
+      convertEol: true,
       cursorBlink: true,
       fontSize: 12,
       fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
@@ -62,6 +64,7 @@ export function TerminalTab(): ReactElement {
       if (data === '\r' || data === '\n') {
         const text = inputBufferRef.current
         inputBufferRef.current = ''
+        pendingLocalEchoRef.current = text + '\n'
         term.write('\r\n')
         void terminalRequest('desktop.terminal.send', { sessionId: currentSession, terminalId: currentTerminal.terminalId, text, submit: true }).catch(() => {})
         return
@@ -123,6 +126,7 @@ export function TerminalTab(): ReactElement {
     const run = ++spawnRunRef.current
     const disposed = { value: false }
     inputBufferRef.current = ''
+    pendingLocalEchoRef.current = ''
     setError(undefined)
     const previous = ownedTerminalRef.current
     ownedTerminalRef.current = undefined
@@ -140,7 +144,6 @@ export function TerminalTab(): ReactElement {
       ownedTerminalRef.current = { terminalId: result.terminalId, exited: false }
       spawnedRef.current = ownedTerminalRef.current
       setSpawned(ownedTerminalRef.current)
-      termRef.current?.write(result.motd)
       fitRef.current?.fit()
     })().catch(() => {
       if (!disposed.value && run === spawnRunRef.current) setError(tRef.current('terminal.spawnError'))
@@ -159,7 +162,11 @@ export function TerminalTab(): ReactElement {
   useEffect(() => {
     if (output === undefined) return
     const delta = output.output.slice(lastLength.current)
-    if (delta.length > 0) termRef.current?.write(delta)
+    if (delta.length > 0) {
+      const visible = consumeLocalTerminalEcho(delta, pendingLocalEchoRef.current)
+      pendingLocalEchoRef.current = visible.pendingEcho
+      if (visible.text.length > 0) termRef.current?.write(visible.text)
+    }
     lastLength.current = output.output.length
     if (output.status?.kind === 'exited' && spawned !== undefined && !spawned.exited) {
       setSpawned({ ...spawned, exited: true })
@@ -170,6 +177,7 @@ export function TerminalTab(): ReactElement {
     if (sessionId === undefined || spawned === undefined) return
     void terminalRequest('desktop.terminal.kill', { sessionId, terminalId: spawned.terminalId }).then(() => {
       inputBufferRef.current = ''
+      pendingLocalEchoRef.current = ''
       setSpawned(undefined)
       termRef.current?.clear()
     }).catch(() => {})

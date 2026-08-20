@@ -15,8 +15,15 @@ describe('M5C.5 terminal PTY-leak guard', () => {
 
   it('sends the line typed in xterm when Enter submits it', () => {
     expect(SRC).toContain('const text = inputBufferRef.current')
+    expect(SRC).toContain("pendingLocalEchoRef.current = text + '\\n'")
     expect(SRC).toContain('text, submit: true')
     expect(SRC).not.toContain("text: '', submit: true")
+  })
+
+  it('renders normalized terminal lines and streams the initial prompt once', () => {
+    expect(SRC).toContain('convertEol: true')
+    expect(SRC).toContain('consumeLocalTerminalEcho(delta, pendingLocalEchoRef.current)')
+    expect(SRC).not.toContain('termRef.current?.write(result.motd)')
   })
 
   it('keeps the xterm instance through inspector-state renders', () => {
