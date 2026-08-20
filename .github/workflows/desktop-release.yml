@@ -8,8 +8,9 @@ name: Desktop release
 #               publishing an unsigned artifact.
 #   preview     ad-hoc signed, NOT notarized DMG; publishes a GitHub
 #               Pre-release only when explicitly requested (manual dispatch
-#               with dry_run=false and release_kind=preview, or an explicit
-#               v*-preview.* tag). A plain push to main publishes nothing.
+#               with dry_run=false, release_kind=preview, and an explicit
+#               release_version input, or a vX.Y.Z-preview.N tag). A plain
+#               push to main publishes nothing.
 
 on:
   workflow_dispatch:
@@ -25,6 +26,10 @@ on:
         description: Build and verify without creating a GitHub Release
         type: boolean
         default: true
+      release_version:
+        description: Release version (X.Y.Z or X.Y.Z-preview.N, no leading v)
+        type: string
+        required: true
   push:
     tags:
       - "v*"
@@ -70,12 +75,11 @@ jobs:
     needs: signing-secrets
     runs-on: macos-15
     environment: release
-    env:
-      DESKTOP_PREVIEW_VERSION: 0.1.0-preview.2
     outputs:
       signed: ${{ needs.signing-secrets.outputs.signed }}
       notarized: ${{ needs.signing-secrets.outputs.notarized }}
       releaseKind: ${{ steps.decide.outputs.kind }}
+      releaseVersion: ${{ steps.decide.outputs.version }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -95,28 +99,43 @@ jobs:
           EVENT: ${{ github.event_name }}
           REF: ${{ github.ref_name }}
           DISPATCH_KIND: ${{ inputs.release_kind }}
+          DISPATCH_VERSION: ${{ inputs.release_version }}
         run: |
           if [ "$EVENT" = "workflow_dispatch" ]; then
-            echo "kind=${DISPATCH_KIND:-preview}" >> "$GITHUB_OUTPUT"
-          elif [[ "$REF" =~ -preview\. ]]; then
-            echo "kind=preview" >> "$GITHUB_OUTPUT"
+            RESOLVED=$(node scripts/resolve-release-version.mjs --input "$DISPATCH_VERSION") || { echo "::error::$RESOLVED"; exit 1; }
           else
-            echo "kind=production" >> "$GITHUB_OUTPUT"
+            RESOLVED=$(node scripts/resolve-release-version.mjs --tag "$REF") || { echo "::error::$RESOLVED"; exit 1; }
           fi
+          VERSION=$(printf "%s\n" "$RESOLVED" | sed -n "s/^version=//p")
+          KIND=$(printf "%s\n" "$RESOLVED" | sed -n "s/^kind=//p")
+          if [ -z "$VERSION" ] || [ -z "$KIND" ]; then
+            echo "::error::resolve-release-version emitted an unexpected response: $RESOLVED"
+            exit 1
+          fi
+          if [ "$DISPATCH_KIND" = "production" ] && [ "$KIND" != "production" ]; then
+            echo "::error::manual dispatch kind production requires a production version input, got $DISPATCH_VERSION"
+            exit 1
+          fi
+          if [ "$DISPATCH_KIND" = "preview" ] && [ "$KIND" != "preview" ]; then
+            echo "::error::manual dispatch kind preview requires a preview version input, got $DISPATCH_VERSION"
+            exit 1
+          fi
+          echo "kind=$KIND" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
       - name: Decide release metadata
         id: meta
         env:
           KIND: ${{ steps.decide.outputs.kind }}
+          VERSION: ${{ steps.decide.outputs.version }}
           SIGNED: ${{ needs.signing-secrets.outputs.signed }}
           NOTARIZED_CREDS: ${{ needs.signing-secrets.outputs.notarized }}
-          PREVIEW_VERSION: ${{ env.DESKTOP_PREVIEW_VERSION }}
         run: |
           if [ "$KIND" = "preview" ]; then
-            echo "version=$PREVIEW_VERSION" >> "$GITHUB_OUTPUT"
+            echo "version=$VERSION" >> "$GITHUB_OUTPUT"
             echo "signing=adhoc" >> "$GITHUB_OUTPUT"
             echo "notarized=false" >> "$GITHUB_OUTPUT"
           else
-            echo "version=" >> "$GITHUB_OUTPUT"
+            echo "version=$VERSION" >> "$GITHUB_OUTPUT"
             if [ "$SIGNED" = "true" ] && [ "$NOTARIZED_CREDS" = "true" ]; then
               echo "signing=developer-id" >> "$GITHUB_OUTPUT"
               echo "notarized=true" >> "$GITHUB_OUTPUT"
@@ -276,6 +295,15 @@ jobs:
             echo "::error::No CycloneDX SBOM in the release assets; the publish gate requires one (see docs/project/SUPPLY-CHAIN.md)"
             exit 1
           fi
+      - name: Refuse duplicate tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="v$(node -e 'const fs=require("fs");const f=fs.readdirSync("dist-exe").find(n=>n.endsWith("-release-manifest.json"));process.stdout.write(JSON.parse(fs.readFileSync("dist-exe/"+f,"utf8")).version)')"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "::error::refusing to publish $tag: the release already exists"
+            exit 1
+          fi
       - name: Attest release artifacts
         uses: actions/attest-build-provenance@v2
         with:
@@ -326,6 +354,15 @@ jobs:
         run: |
           if [ -z "$(ls dist-exe/*-sbom.cdx.json 2>/dev/null)" ]; then
             echo "::error::No CycloneDX SBOM in the release assets; the publish gate requires one (see docs/project/SUPPLY-CHAIN.md)"
+            exit 1
+          fi
+      - name: Refuse duplicate tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="v$(node -e 'const fs=require("fs");const f=fs.readdirSync("dist-exe").find(n=>n.endsWith("-release-manifest.json"));process.stdout.write(JSON.parse(fs.readFileSync("dist-exe/"+f,"utf8")).version)')"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "::error::refusing to publish $tag: the release already exists"
             exit 1
           fi
       - name: Attest release artifacts

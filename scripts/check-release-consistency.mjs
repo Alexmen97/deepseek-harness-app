@@ -10,6 +10,7 @@ import { createHash } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
 import { resolve } from 'node:path'
+import { resolveTag } from './resolve-release-version.mjs'
 
 const root = resolve(import.meta.dirname, '..')
 const read = (rel) => JSON.parse(readFileSync(resolve(root, rel), 'utf8'))
@@ -20,6 +21,11 @@ const conf = read('apps/desktop/src-tauri/tauri.conf.json')
 const upstream = read('docs/project/upstream-base.json')
 const project = read('docs/project/project-metadata.json')
 const version = process.env.DESKTOP_RELEASE_VERSION ?? conf.version
+const releaseTag = process.env.DESKTOP_RELEASE_TAG
+const resolvedTag = releaseTag === undefined ? undefined : resolveTag(releaseTag)
+if (releaseTag !== undefined && !resolvedTag.ok) {
+  failures.push("DESKTOP_RELEASE_TAG does not parse: " + resolvedTag.reason)
+}
 const expectedDmg = project.artifactPrefix + '-v' + version + '-macOS-arm64.dmg'
 const expectedSbom = project.artifactPrefix + '-v' + version + '-sbom.cdx.json'
 const dist = resolve(root, 'dist-exe')
@@ -57,6 +63,14 @@ if (existsSync(resolve(dist, manifestName))) {
     check(manifest.signing === 'adhoc', 'preview manifest must declare adhoc signing')
     check(manifest.notarized === false, 'preview manifest must declare notarized=false')
   }
+   if (manifest.releaseKind === 'production') {
+     check(manifest.signing === 'developer-id', 'production manifest must declare developer-id signing')
+     check(manifest.notarized === true, 'production manifest must declare notarized=true')
+   }
+   if (resolvedTag !== undefined && resolvedTag.ok) {
+     check(resolvedTag.version === version, 'release tag version does not match the resolved release version')
+     check(resolvedTag.kind === manifest.releaseKind, 'release tag kind does not match the manifest releaseKind')
+   }
   const head = (() => { try { return execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim() } catch { return 'unknown' } })()
   check(manifest.buildCommit === head, 'manifest build commit drift: ' + manifest.buildCommit + ' vs ' + head)
   check(typeof manifest.buildTimestamp === 'string' && manifest.buildTimestamp.length > 0, 'manifest build timestamp missing')

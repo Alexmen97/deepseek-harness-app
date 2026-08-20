@@ -40,10 +40,24 @@ scripts/make-desktop-dmg.mjs stages Harness Desktop.app beside an Applications a
 
 ## Release classes
 
+
+
 The release workflow (.github/workflows/desktop-release.yml) supports two explicit classes. A plain push to main never publishes a Release.
 
-- preview: ad-hoc signed, NOT notarized, published only when explicitly requested (manual dispatch with release_kind=preview and dry_run=false, or an explicit v*-preview.* tag) as a GitHub Pre-release titled Public Preview — Unsigned / Not Notarized. Gatekeeper warns on first launch; users choose Open Anyway in System Settings → Privacy & Security.
-- production: Developer ID signed, notarized, stapled, published as a DRAFT prerelease from a v* tag. Without Developer ID and notarization credentials the build fails before publication; it never publishes an unsigned stable release.
+- preview: ad-hoc signed, NOT notarized, published only when explicitly triggered (manual dispatch with release_kind=preview, dry_run=false, and an explicit release_version input, or a vX.Y.Z-preview.N tag) as a GitHub Pre-release titled Public Preview — Unsigned / Not Notarized. Gatekeeper warns on first launch; users choose Open Anyway in System Settings → Privacy & Security.
+- production: Apple Developer ID signed, notarized, stapled, published as a DRAFT prerelease from a vX.Y.Z tag. Without Developer ID and notarization credentials the build fails before publication; it never publishes an unsigned stable release.
+
+## Release versions
+
+The canonical release version is derived once per run and propagated to every artifact (Tauri app version, DMG filename, .sha256, release manifest, SBOM, and release title). The workflow no longer carries a hardcoded preview version constant.
+
+- Preview tags: `vX.Y.Z-preview.N` → version `X.Y.Z-preview.N`, releaseKind `preview`. The sequence number is required.
+- Production tags: `vX.Y.Z` → version `X.Y.Z`, releaseKind `production`.
+- Manual dispatch: `release_version` (no leading `v`) is required; `release_kind` must match the version grammar (preview versions for preview kind, production versions for production kind).
+- Malformed tags or inputs are rejected by scripts/resolve-release-version.mjs; the workflow fails before building.
+- A tag that already has a GitHub Release is refused, so a published version cannot be silently overwritten.
+
+Run a dry-run with `release_kind` and an explicit synthetic version such as `0.1.0-preview.99` (dry_run defaults to true) to verify the full artifact family without creating a Release.
 
 The release manifest always states releaseKind, signing, and notarized fields; preview builds declare signing=adhoc and notarized=false. The DMG filename carries the version (v0.1.0-preview.1 for previews) so a preview never overwrites a future production artifact.
 
