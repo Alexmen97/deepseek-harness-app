@@ -15,7 +15,7 @@ describe('M5A editor tab routing', () => {
 
   it('wraps the external-change banner so long localized labels never truncate', () => {
     expect(SRC).toContain("flexWrap: 'wrap'")
-    expect(SRC).toContain("flex: '1 1 240px'")
+    expect(SRC).toContain("flex: '1 1 100%'")
     expect(SRC).toContain("whiteSpace: 'nowrap'")
   })
 })

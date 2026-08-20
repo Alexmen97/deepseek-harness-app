@@ -180,7 +180,7 @@ export function EditorSurface(): ReactElement {
       </div>
       {active !== undefined && active.status === 'conflict' && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center', padding: '8px 12px', borderBottom: '1px solid ' + palette.inputBorder, fontSize: 12 }}>
-          <span style={{ flex: '1 1 240px' }}>{active.message === 'FS_EXTERNAL_CHANGE' ? t('editor.externalBody') : t('editor.conflictBody')}</span>
+          <span style={{ flex: '1 1 100%' }}>{active.message === 'FS_EXTERNAL_CHANGE' ? t('editor.externalBody') : t('editor.conflictBody')}</span>
           <button onClick={() => { void reloadBuffer(active.path) }} style={{ background: '#2f6fed', border: 'none', color: '#fff', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 12, whiteSpace: 'nowrap' }}>{active.message === 'FS_EXTERNAL_CHANGE' ? t('editor.externalReload') : t('editor.conflictReload')}</button>
           <button onClick={() => { keepBufferChanges(active.path) }} style={{ background: 'transparent', border: '1px solid ' + palette.inputBorder, color: palette.text, borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 12, whiteSpace: 'nowrap' }}>{active.message === 'FS_EXTERNAL_CHANGE' ? t('editor.externalKeep') : t('editor.conflictKeep')}</button>
         </div>
