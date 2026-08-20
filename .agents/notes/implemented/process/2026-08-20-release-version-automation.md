@@ -1,4 +1,5 @@
 # Agent Note: Release version automation (M5C.6)
+
 Status: implemented
 
 English | [中文](2026-08-20-release-version-automation.zh.md)
