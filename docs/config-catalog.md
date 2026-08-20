@@ -593,7 +593,7 @@ export interface JsonRpcConfig {
 
 Depends on: `Readable` (`node:stream`) · `Writable` (`node:stream`)
 
-Source: [`packages/desktop/desktop-jsonrpc-server/src/index.ts:94`](../packages/desktop/desktop-jsonrpc-server/src/index.ts)
+Source: [`packages/desktop/desktop-jsonrpc-server/src/index.ts:101`](../packages/desktop/desktop-jsonrpc-server/src/index.ts)
 
 <a id="deepseek-aidsh-e2b"></a>
 

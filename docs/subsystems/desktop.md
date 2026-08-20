@@ -22,5 +22,5 @@ Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnp
 
 Runtime identity values provided by the composing app bin.
 
-Source: [`packages/desktop/desktop-jsonrpc-server/src/index.ts:80`](../../packages/desktop/desktop-jsonrpc-server/src/index.ts)
+Source: [`packages/desktop/desktop-jsonrpc-server/src/index.ts:87`](../../packages/desktop/desktop-jsonrpc-server/src/index.ts)
 <!-- END GENERATED cordis-surface -->
