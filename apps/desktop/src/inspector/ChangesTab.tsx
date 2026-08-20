@@ -7,7 +7,7 @@ import type { ReactElement } from 'react'
 import { desktopBindings, type DesktopGitError } from '@deepseek-ai/dsh-desktop-client'
 import { useDesktopStrings, desktopPalette, useDesktopAppearance } from '@deepseek-ai/dsh-desktop-client/src/ui/strings'
 import { parseDiff, statusCategory } from './diff.ts'
-import { actionsFor, diffNavigationPaths, discardBlockedReason, hasStagedSide, sortChanges, splitGitStatus, stageDirtyWarning, type GitChangeEntry } from './git-model.ts'
+import { actionsFor, diffNavigationPaths, discardBlockedReason, hasStagedSide, hunkActionsFor, sortChanges, splitGitStatus, stageDirtyWarning, type GitChangeEntry } from './git-model.ts'
 import { createChangesCore, type ChangesCore } from './changes-core.ts'
 import { onFilesInvalidated } from './filesync.ts'
 import { getEditorState, openFile, useEditorState } from './editorStore.ts'
@@ -23,6 +23,9 @@ const getCore = (): ChangesCore => {
       gitUnstageFile: async (path) => { await host.gitUnstageFile(path) },
       gitDiscardFile: async (path) => { await host.gitDiscardFile(path) },
       gitDiffFile: (path, cached) => host.gitDiffFile(path, cached),
+      gitStageHunk: request => host.gitStageHunk(request),
+      gitUnstageHunk: request => host.gitUnstageHunk(request),
+      gitDiscardHunk: request => host.gitDiscardHunk(request),
     }, {
       // UI data-loss guard only: the Rust host validates git/path state independently.
       isDirty: path => getEditorState().buffers[path]?.status === 'dirty',
@@ -37,6 +40,10 @@ const errorText = (t: (key: string) => string, error: DesktopGitError): string =
   if (error.code === 'DIRTY_EDITOR_BLOCK') return t('changes.discardBlockedDirty')
   if (error.code === 'GIT_STATE_CHANGED') return t('changes.stateChanged')
   if (error.code === 'UNSUPPORTED_GIT_STATE') return t('changes.cannotDiscard')
+  if (error.code === 'GIT_DIFF_STALE') return t('changes.hunkStale')
+  if (error.code === 'HUNK_NOT_FOUND') return t('changes.hunkNotFound')
+  if (error.code === 'HUNK_UNSUPPORTED') return t('changes.hunkUnsupported')
+  if (error.code === 'HUNK_APPLY_FAILED') return t('changes.hunkApplyFailed')
   return t('changes.opFailed') + ': ' + error.message
 }
 
@@ -49,6 +56,7 @@ export function ChangesTab(): ReactElement {
   const ops = useSyncExternalStore(operations.subscribe, operations.getOps)
   const view = useSyncExternalStore(operations.subscribe, operations.getView)
   const [confirming, setConfirming] = useState<GitChangeEntry | undefined>(undefined)
+  const [confirmingHunk, setConfirmingHunk] = useState<{ path: string; hunkId: string; diffToken: string } | undefined>(undefined)
 
   const refresh = useCallback((): void => { void operations.refresh() }, [operations])
   useEffect(() => { void operations.refresh() }, [operations])
@@ -75,11 +83,14 @@ export function ChangesTab(): ReactElement {
     return [...model.staged, ...model.unstaged, ...model.conflicted].find(entry => entry.path === selectedPath)
   }, [selectedPath, model])
   const selectedDiff = selectedPath !== undefined ? view.diffs[selectedPath]?.[view.mode] : undefined
+  const selectedDiffToken = selectedDiff?.diffToken ?? ''
   const parsedSelected = selectedDiff?.diff !== undefined && !selectedDiff.binary && !selectedDiff.tooLarge && selectedDiff.diff.trim() !== ''
     ? parseDiff(selectedDiff.diff) : undefined
   const stagedAvailable = selectedEntry !== undefined && selectedEntry.status !== '??' && selectedEntry.status.charAt(0) !== '.' && !selectedEntry.conflicted
   const unstagedAvailable = selectedEntry !== undefined && (selectedEntry.status === '??' || selectedEntry.status.charAt(1) !== '.') && !selectedEntry.conflicted
   const bothModes = stagedAvailable && unstagedAvailable
+  const hunkActions = selectedEntry !== undefined && selectedDiff !== undefined && !selectedDiff.binary && !selectedDiff.tooLarge
+    ? hunkActionsFor(selectedEntry, view.mode) : []
 
   const diffFiles = useMemo(() => {
     return diffNavigationPaths(model)
@@ -154,6 +165,11 @@ export function ChangesTab(): ReactElement {
             {diffLine('header', hunk.header, undefined, undefined, hunkIndex * -1 - 1)}
             {hunk.lines.map((entry, entryIndex) => diffLine(entry.kind, entry.text, entry.oldLine,
               entry.newLine, hunkIndex * 100000 + entryIndex))}
+            {hunkActions.length > 0 && (
+              <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', padding: '2px 8px 4px 0' }}>
+                {hunkActions.map(action => hunkActionButton(action, hunk.hunkId, hunkIndex * 10 + hunkActions.indexOf(action)))}
+              </div>
+            )}
           </div>
         ))}
       </div>
@@ -183,6 +199,33 @@ export function ChangesTab(): ReactElement {
         aria-busy={busy}
         title={destructive ? t('changes.discard') : action === 'stage' ? t('changes.stage') : t('changes.unstage')}
         style={{ background: 'transparent', border: '1px solid ' + (destructive ? '#f85149' : palette.inputBorder), color: destructive ? '#f85149' : palette.text, borderRadius: 6, fontSize: 11, padding: '1px 8px', cursor: busy || discardBlocked ? 'default' : 'pointer', opacity: busy || discardBlocked ? 0.6 : 1 }}
+      >
+        {label}
+      </button>
+    )
+  }
+  const hunkActionButton = (action: 'stage' | 'unstage' | 'discard', hunkId: string, key: number): ReactElement => {
+    const path = selectedPath
+    if (path === undefined || selectedDiff === undefined) return <span key={key} />
+    const pending = ops.pendingHunks[path + '::' + hunkId]
+    const busy = pending !== undefined
+    const dirtyBlocked = action === 'discard' && dirtyPaths.has(selectedEntry?.workspacePath ?? '')
+    const label = action === 'stage'
+      ? (busy ? t('changes.staging') : t('changes.stageHunk'))
+      : action === 'unstage'
+        ? (busy ? t('changes.unstaging') : t('changes.unstageHunk'))
+        : (busy ? t('changes.discarding') : t('changes.discardHunk'))
+    return (
+      <button
+        key={key}
+        onClick={(event) => {
+          event.stopPropagation()
+          if (action === 'discard') { setConfirmingHunk({ path, hunkId, diffToken: selectedDiffToken }); return }
+          void (action === 'stage' ? operations.stageHunk(path, hunkId, selectedDiffToken) : operations.unstageHunk(path, hunkId, selectedDiffToken))
+        }}
+        disabled={busy || dirtyBlocked}
+        title={action === 'discard' ? t('changes.discardHunk') : action === 'stage' ? t('changes.stageHunk') : t('changes.unstageHunk')}
+        style={{ background: 'transparent', border: '1px solid ' + (action === 'discard' ? '#f85149' : palette.inputBorder), color: action === 'discard' ? '#f85149' : palette.text, borderRadius: 6, fontSize: 10.5, padding: '1px 8px', cursor: busy || dirtyBlocked ? 'default' : 'pointer', opacity: busy || dirtyBlocked ? 0.6 : 1 }}
       >
         {label}
       </button>
@@ -290,6 +333,28 @@ export function ChangesTab(): ReactElement {
                 style={{ background: '#f85149', border: 'none', color: '#ffffff', borderRadius: 6, padding: '5px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
               >
                 {t('changes.discard')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {confirmingHunk !== undefined && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 1200, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.45)' }}>
+          <div role="dialog" aria-modal="true" aria-label={t('changes.discardHunkTitle')} style={{ background: palette.dialog, border: '1px solid ' + palette.inputBorder, borderRadius: 10, padding: 16, width: 420, maxWidth: '90%', color: palette.text, fontFamily: 'system-ui' }}>
+            <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>{t('changes.discardHunkTitle')}</div>
+            <div style={{ fontSize: 12.5, color: palette.muted, marginBottom: 8, wordBreak: 'break-all' }}>{confirmingHunk.path}</div>
+            <div style={{ fontSize: 12.5, marginBottom: 14 }}>{t('changes.discardHunkConsequence')}</div>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button onClick={() => { setConfirmingHunk(undefined) }} style={{ background: 'transparent', border: '1px solid ' + palette.inputBorder, color: palette.text, borderRadius: 6, padding: '5px 12px', fontSize: 12, cursor: 'pointer' }}>{t('changes.cancel')}</button>
+              <button
+                onClick={() => {
+                  const target = confirmingHunk
+                  setConfirmingHunk(undefined)
+                  void operations.discardHunk(target.path, target.hunkId, target.diffToken)
+                }}
+                style={{ background: '#f85149', border: 'none', color: '#ffffff', borderRadius: 6, padding: '5px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+              >
+                {t('changes.discardHunk')}
               </button>
             </div>
           </div>

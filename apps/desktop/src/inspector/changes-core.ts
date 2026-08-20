@@ -5,6 +5,7 @@
  */
 
 import type { DesktopGitDiff, DesktopGitError, DesktopGitFileDiff, DesktopGitStatusV2 } from '@deepseek-ai/dsh-desktop-client'
+import type { DesktopGitHunkRequest, DesktopGitHunkResult } from '@deepseek-ai/dsh-desktop-client'
 
 /** The two diff modes; cached selects the staged side. */
 export type DiffMode = 'unstaged' | 'staged'
@@ -17,6 +18,9 @@ export interface ChangesHost {
   gitUnstageFile(path: string): Promise<void>
   gitDiscardFile(path: string): Promise<void>
   gitDiffFile(path: string, cached: boolean): Promise<DesktopGitFileDiff>
+  gitStageHunk(request: DesktopGitHunkRequest): Promise<DesktopGitHunkResult>
+  gitUnstageHunk(request: DesktopGitHunkRequest): Promise<DesktopGitHunkResult>
+  gitDiscardHunk(request: DesktopGitHunkRequest): Promise<DesktopGitHunkResult>
 }
 
 /** Options for the operations core; the discard guard is a UI data-loss guard only. */
@@ -33,6 +37,10 @@ export interface ChangesOpsState {
   pending: Record<string, ChangeOpState>
   /** Path -> the last failed operation's typed error. */
   errors: Record<string, DesktopGitError | undefined>
+  /** Composite key path + "::" + hunkId -> in-flight hunk operation (M5D). */
+  pendingHunks: Record<string, ChangeOpState>
+  /** Composite key path + "::" + hunkId -> the last failed hunk operation's error. */
+  errorsHunks: Record<string, DesktopGitError | undefined>
 }
 
 /** The diff viewer selection and per-mode diff cache (session-only). */
@@ -61,6 +69,12 @@ export interface ChangesCore {
   unstage: (path: string) => Promise<void>
   /** Discard one tracked worktree change; blocked locally while the editor is dirty. */
   discard: (path: string) => Promise<void>
+  /** Stage one textual hunk of the unstaged diff (M5D). */
+  stageHunk: (path: string, hunkId: string, diffToken: string) => Promise<void>
+  /** Unstage one textual hunk of the staged diff (M5D). */
+  unstageHunk: (path: string, hunkId: string, diffToken: string) => Promise<void>
+  /** Discard one textual hunk of the unstaged diff; blocked while the editor is dirty (M5D). */
+  discardHunk: (path: string, hunkId: string, diffToken: string) => Promise<void>
   /** Select a file; the diff mode defaults from the clicked section (session-only). */
   select: (path: string | undefined, from: 'staged' | 'changes') => void
   /** Switch the active diff mode of the selected file. */
@@ -70,13 +84,13 @@ export interface ChangesCore {
   subscribe: (listener: () => void) => () => void
 }
 
-const EMPTY_OPS: ChangesOpsState = { pending: {}, errors: {} }
+const EMPTY_OPS: ChangesOpsState = { pending: {}, errors: {}, pendingHunks: {}, errorsHunks: {} }
 
 /** Create the Changes operations core over an injected host. */
 export function createChangesCore(host: ChangesHost, options: ChangesCoreOptions = {}): ChangesCore {
   let status: DesktopGitStatusV2 | undefined
   let diff: DesktopGitDiff | undefined
-  let ops: ChangesOpsState = { pending: {}, errors: {} }
+  let ops: ChangesOpsState = { pending: {}, errors: {}, pendingHunks: {}, errorsHunks: {} }
   let view: ChangesViewState = EMPTY_VIEW
   let diffGeneration = 0
   const listeners = new Set<() => void>()
@@ -107,17 +121,37 @@ export function createChangesCore(host: ChangesHost, options: ChangesCoreOptions
   const setPending = (path: string, state: ChangeOpState | 'idle'): void => {
     if (state === 'idle') {
       const pending = Object.fromEntries(Object.entries(ops.pending).filter(([key]) => key !== path))
-      ops = { pending, errors: ops.errors }
+      ops = { ...ops, pending }
       return
     }
-    ops = { pending: { ...ops.pending, [path]: state }, errors: ops.errors }
+    ops = { ...ops, pending: { ...ops.pending, [path]: state } }
   }
 
   const setError = (path: string, error: DesktopGitError | undefined): void => {
     const errors = error === undefined
       ? Object.fromEntries(Object.entries(ops.errors).filter(([key]) => key !== path))
       : { ...ops.errors, [path]: error }
-    ops = { pending: ops.pending, errors }
+    ops = { ...ops, errors }
+  }
+
+  const hunkKey = (path: string, hunkId: string): string => path + '::' + hunkId
+
+  const setHunkPending = (path: string, hunkId: string, state: ChangeOpState | 'idle'): void => {
+    const key = hunkKey(path, hunkId)
+    if (state === 'idle') {
+      const pendingHunks = Object.fromEntries(Object.entries(ops.pendingHunks).filter(([k]) => k !== key))
+      ops = { ...ops, pendingHunks }
+      return
+    }
+    ops = { ...ops, pendingHunks: { ...ops.pendingHunks, [key]: state } }
+  }
+
+  const setHunkError = (path: string, hunkId: string, error: DesktopGitError | undefined): void => {
+    const key = hunkKey(path, hunkId)
+    const errorsHunks = error === undefined
+      ? Object.fromEntries(Object.entries(ops.errorsHunks).filter(([k]) => k !== key))
+      : { ...ops.errorsHunks, [key]: error }
+    ops = { ...ops, errorsHunks }
   }
 
   /** Whether the path still exists in the model with the given mode available. */
@@ -178,6 +212,25 @@ export function createChangesCore(host: ChangesHost, options: ChangesCoreOptions
     }
   }
 
+  const runHunk = async (path: string, hunkId: string, state: ChangeOpState, runHost: () => Promise<unknown>): Promise<void> => {
+    const key = hunkKey(path, hunkId)
+    if (ops.pendingHunks[key] !== undefined) return
+    setHunkPending(path, hunkId, state)
+    emit()
+    try {
+      await runHost()
+      setHunkError(path, hunkId, undefined)
+      await refresh()
+    } catch (error) {
+      setHunkError(path, hunkId, error as DesktopGitError)
+      // Server state did not change: keep the current UI and model.
+      emit()
+    } finally {
+      setHunkPending(path, hunkId, 'idle')
+      emit()
+    }
+  }
+
   return {
     getStatus: () => status,
     getDiff: () => diff,
@@ -197,6 +250,17 @@ export function createChangesCore(host: ChangesHost, options: ChangesCoreOptions
         throw error
       }
       return host.gitDiscardFile(path)
+    }),
+    stageHunk: (path, hunkId, diffToken) => runHunk(path, hunkId, 'staging', () => host.gitStageHunk({ path, cached: false, hunkId, diffToken })),
+    unstageHunk: (path, hunkId, diffToken) => runHunk(path, hunkId, 'unstaging', () => host.gitUnstageHunk({ path, cached: true, hunkId, diffToken })),
+    discardHunk: (path, hunkId, diffToken) => runHunk(path, hunkId, 'discarding', () => {
+      if (options.isDirty?.(path) === true) {
+        // UI data-loss guard: never invoke the host for a dirty editor buffer.
+        const error = new Error('This file has unsaved editor changes. Save or discard the editor draft before discarding changes from disk.') as DesktopGitError & Error
+        error.code = 'DIRTY_EDITOR_BLOCK'
+        throw error
+      }
+      return host.gitDiscardHunk({ path, cached: false, hunkId, diffToken })
     }),
     select: (path, from) => {
       const mode: DiffMode = from === 'staged' ? 'staged' : 'unstaged'

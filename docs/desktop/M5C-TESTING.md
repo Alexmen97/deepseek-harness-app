@@ -85,6 +85,31 @@ The interactive discard flows (tracked modified, staged+unstaged, dirty block, d
 
 The interactive diff flows (row click default modes, selector, prev/next, staged vs unstaged sides, binary, rename, open-file, selection continuity, no stale diff, Cmd+Q, no orphan) are scheduled for M5C.5 on a disposable fixture; the semantics are pinned by the automated suites above (honest label: automated only).
 
+## M5D - safe hunk-level Git operations
+
+### Rust (apps/desktop/src-tauri, cargo test)
+
+- `commands::tests::hunk_stage_unstage_discard_middle_of_three` - the central acceptance fixture: a file with three separated textual hunks; Stage Hunk applies only the middle hunk to the index (staged=1, unstaged=2), Unstage Hunk reverses only it (unstaged=3), Discard Hunk reverts only one worktree hunk (unstaged=2).
+- `commands::tests::hunk_same_file_staged_and_unstaged_stay_semantically_separate` - HEAD A / index B / worktree C matrix: staging one hunk then editing a new location keeps the staged and unstaged sides semantically separate, and discarding one unstaged hunk leaves the staged side intact.
+- `commands::tests::hunk_stale_token_and_missing_hunk_fail_typed` - a stale diff token returns GIT_DIFF_STALE and an unknown hunk identity returns HUNK_NOT_FOUND; no patch is applied.
+- `commands::tests::hunk_rejects_binary_and_untracked_and_non_textual` - binary diffs and untracked files return HUNK_UNSUPPORTED.
+- `commands::tests::hunk_supports_weird_filenames_with_spaces` and `hunk_supports_unicode_filenames` - patch headers for spaces, leading dash, and non-ASCII names round-trip through git apply.
+- `commands::tests::hunk_works_with_repo_root_above_workspace_subdir` - workspace containment holds when the repository root sits above the workspace; repo-relative paths are used.
+
+### Vitest (apps/desktop/tests)
+
+- `diff.spec.ts` - hunk identity (FNV-1a of header + raw body) is stable and matches the Rust host token format.
+- `git-model.spec.ts` - hunkActionsFor returns per-mode actions only for eligible tracked textual rows; staged-new (A.), delete-only (.D), untracked, rename, copy, conflicted, and outside-workspace rows offer no hunk actions.
+- `changes-core.spec.ts` - stageHunk/unstageHunk/discardHunk route path+hunkId+diffToken to the host; Discard Hunk is blocked while the editor buffer is dirty (DIRTY_EDITOR_BLOCK); pending state is tracked per hunk and cleared after the host settles.
+
+### Localization
+
+- 9 new keys (stageHunk, unstageHunk, discardHunk, discardHunkTitle, discardHunkConsequence, hunkStale, hunkNotFound, hunkUnsupported, hunkApplyFailed) in all seven locales; desktop:i18n:check at 877 keys x 7 locales.
+
+### Manual QA record
+
+The interactive hunk flows (3-hunk fixture, stage middle, staged diff shows only middle, unstage middle, discard one, dirty-editor block, stale diff token, same file staged+unstaged, filename with spaces, no WebView crash, diff refresh/navigation, quit, no orphan) are scheduled for the preview.3 QA pass on a disposable fixture; the semantics are pinned by the automated suites above (honest label: automated only).
+
 ## CI fix (M5C.2)
 
 - `scripts/prepare-desktop-rust-tests.mjs` now stages the `dsh-desktop-runtime-spawn-helper` placeholder alongside the runtime placeholder, closing the CI Desktop failure (M5B.2/M5C.1) where tauri.conf.json declared the spawn-helper bundle resource but the deterministic staging script did not create it; `check-desktop-rust-resources.mjs` now passes in a clean checkout.

@@ -88,6 +88,12 @@ export interface DesktopHost {
   gitDiscardFile(path: string): Promise<void>
   /** One per-file diff; cached selects the staged side (git diff --cached). */
   gitDiffFile(path: string, cached: boolean): Promise<DesktopGitFileDiff>
+  /** Stage one textual hunk of the worktree diff (M5D). */
+  gitStageHunk(request: DesktopGitHunkRequest): Promise<DesktopGitHunkResult>
+  /** Unstage one textual hunk of the staged diff (M5D). */
+  gitUnstageHunk(request: DesktopGitHunkRequest): Promise<DesktopGitHunkResult>
+  /** Discard one textual hunk of the worktree diff (M5D). */
+  gitDiscardHunk(request: DesktopGitHunkRequest): Promise<DesktopGitHunkResult>
   /** Reveal the runtime log files in the system viewer. */
   openLogs(): Promise<void>
   /** Open an external URL in the system browser. */
@@ -177,6 +183,23 @@ export interface DesktopGitFileDiff {
   tooLarge: boolean
   /** True when git reports binary content; the payload is never rendered. */
   binary: boolean
+  /** FNV-1a token of the exact diff bytes; echoed back for M5D hunk actions. */
+  diffToken: string
+}
+
+/** M5D hunk mutation request: path + side + hunk identity + diff token. The
+ * frontend never sends patch text; the host re-reads the diff and rebuilds
+ * the patch server-side. */
+export interface DesktopGitHunkRequest {
+  path: string
+  cached: boolean
+  hunkId: string
+  diffToken: string
+}
+
+/** M5D hunk mutation result: a fresh diff token for the affected side. */
+export interface DesktopGitHunkResult {
+  diffToken: string
 }
 
 /** Typed error from the M5C.2 git mutation commands; the frontend never parses raw git stderr. */

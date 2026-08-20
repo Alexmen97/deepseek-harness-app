@@ -38,6 +38,25 @@ export interface GitRowActions {
 }
 
 /**
+ * The hunk-level actions a diff viewer may offer for one row (M5D).
+ * Mirrors the host eligibility: textual tracked files only; binary,
+ * conflicted, untracked, rename/copy, staged-deletion, and delete-only
+ * rows offer no hunk actions. A staged-new row (X = A) cannot partially
+ * unstage in git, so its staged side offers no Unstage Hunk.
+ */
+export function hunkActionsFor(entry: GitChangeEntry, mode: 'staged' | 'unstaged'): Array<'stage' | 'unstage' | 'discard'> {
+  if (entry.conflicted || !entry.insideWorkspace || entry.status === '??') return []
+  const x = entry.status.charAt(0)
+  const y = entry.status.charAt(1)
+  if (x === 'R' || x === 'C' || x === 'D' || y === 'D') return []
+  if (mode === 'staged') {
+    if (x === 'A') return []
+    return ['unstage']
+  }
+  return ['stage', 'discard']
+}
+
+/**
  * Whether one tracked worktree change is discardable. Mirrors the host
  * eligibility (git restore --worktree): Y = M or D with X in {., M, A};
  * staged-only (Y = .), staged deletions (X = D), rename/copy entries,

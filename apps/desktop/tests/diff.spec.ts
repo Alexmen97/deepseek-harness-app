@@ -49,6 +49,14 @@ describe('M4 diff parsing', () => {
     expect(parsed.files[0]?.hunks[0]?.newStart).toBe(1)
   })
 
+  it('derives a stable hunk identity from the hunk header and raw body', () => {
+    const parsed = parseDiff(SAMPLE)
+    const hunk = parsed.files[0]?.hunks[0]
+    expect(hunk?.hunkId).toMatch(/^[0-9a-f]{16}$/)
+    // identical input yields the identical identity
+    expect(parseDiff(SAMPLE).files[0]?.hunks[0]?.hunkId).toBe(hunk?.hunkId)
+  })
+
   it('maps porcelain status pairs to user-facing categories', () => {
     expect(statusCategory('M ')).toBe('modified')
     expect(statusCategory('A ')).toBe('added')

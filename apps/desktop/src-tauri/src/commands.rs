@@ -929,6 +929,9 @@ pub struct GitFileDiff {
     pub diff: String,
     pub too_large: bool,
     pub binary: bool,
+    /// FNV-1a of the exact diff bytes this payload carried; the frontend
+    /// echoes it back for a hunk mutation so a stale diff never applies.
+    pub diff_token: String,
 }
 
 /// One per-path diff over a fixed argv: `git diff -- <path>` (unstaged) or
@@ -939,6 +942,10 @@ fn git_diff_file_at(workspace: &Path, repo_rel: &str, cached: bool) -> Result<Gi
     let rel = workspace_rel_for(workspace, repo_rel)?;
     contained_git_path(workspace, &rel)?;
     let mut args: Vec<&str> = vec!["diff", "--no-color", "--no-ext-diff"];
+    // Keep non-ASCII paths unquoted in the diff header so the hunk patch
+    // matches the validated workspace-relative path (M5D hunk actions).
+    args.insert(0, "core.quotePath=false");
+    args.insert(0, "-c");
     if cached {
         args.push("--cached");
     }
@@ -951,18 +958,204 @@ fn git_diff_file_at(workspace: &Path, repo_rel: &str, cached: bool) -> Result<Gi
     let text = String::from_utf8_lossy(&output.stdout).into_owned();
     let too_large = text.len() > GIT_DIFF_MAX_BYTES;
     let binary = text.contains("Binary files ") || text.contains("GIT binary patch") || text.contains("Binary file ");
-    Ok(GitFileDiff { diff: text, too_large, binary })
+    let diff_token = diff_token_for(&text);
+    Ok(GitFileDiff { diff: text, too_large, binary, diff_token })
 }
 
 /// Fetch one staged or unstaged per-file diff through the narrow Tauri host
 /// capability. `cached` selects the staged side (`--cached`); the workspace
 /// watcher is never consulted for index-only state.
 #[tauri::command]
-pub fn git_diff_file(app: tauri::AppHandle, path: String, cached: bool) -> Result<GitFileDiff, GitError> {
-    let root = workspace_root(&app).map_err(GitError::workspace)?;
-    git_diff_file_at(&root, &path, cached)
+ pub fn git_diff_file(app: tauri::AppHandle, path: String, cached: bool) -> Result<GitFileDiff, GitError> {
+     let root = workspace_root(&app).map_err(GitError::workspace)?;
+     git_diff_file_at(&root, &path, cached)
+ }
+
+/// FNV-1a 64-bit hash rendered as hex: a cheap content token for one diff
+/// payload. The token is not cryptographic; it guards against stale UI
+/// actions, not against a hostile frontend (the host re-reads the diff and
+/// re-extracts the hunk server-side before any patch is built).
+fn diff_token_for(text: &str) -> String {
+    let mut hash: u64 = 0xcbf29ce484222325;
+    for byte in text.as_bytes() {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+    format!("{hash:016x}")
 }
 
+/// A stable hunk identity: hunk header + normalized body hash.
+fn hunk_identity(header: &str, body: &[String]) -> String {
+    let mut normalized = String::from(header);
+    for line in body {
+        normalized.push('\n');
+        normalized.push_str(line);
+    }
+    diff_token_for(&normalized)
+}
+
+/// Split one per-file git diff into hunks plus the file header block.
+fn split_diff_hunks(diff: &str) -> (Vec<(String, Vec<String>, String)>, Vec<String>) {
+    let mut hunks = Vec::new();
+    let mut header_block = Vec::new();
+    let mut current: Option<(String, Vec<String>)> = None;
+    for line in diff.lines() {
+        if line.starts_with("diff --git ") {
+            if header_block.is_empty() { header_block.push(line.to_string()); }
+            continue;
+        }
+        if header_block.is_empty() { continue }
+        if line.starts_with("@@") {
+            if let Some((header, body)) = current.take() {
+                let id = hunk_identity(&header, &body);
+                hunks.push((header, body, id));
+            }
+            current = Some((line.to_string(), Vec::new()));
+            continue;
+        }
+        if let Some((_, body)) = current.as_mut() {
+            body.push(line.to_string());
+            continue;
+        }
+        if header_block.len() < 4 { header_block.push(line.to_string()); }
+    }
+    if let Some((header, body)) = current.take() {
+        let id = hunk_identity(&header, &body);
+        hunks.push((header, body, id));
+    }
+    (hunks, header_block)
+}
+
+/// Whether the diff is one textual file with hunks for the expected path.
+fn diff_is_textual_single_file(diff: &str, expected_path: &str) -> bool {
+    if diff.is_empty() || diff.contains("Binary files ") || diff.contains("GIT binary patch") { return false }
+    if diff.matches("diff --git ").count() != 1 || !diff.contains("@@") { return false }
+    let marker = format!(" b/{expected_path}");
+    diff.lines().find(|line| line.starts_with("diff --git ")).map(|line| line.contains(&marker)).unwrap_or(false)
+}
+
+/// Patch text for one hunk: header block plus exactly the requested hunk.
+fn hunk_patch_text(header_block: &[String], hunk_header: &str, hunk_body: &[String]) -> String {
+    let mut patch = String::new();
+    for line in header_block { patch.push_str(line); patch.push('\n'); }
+    patch.push_str(hunk_header);
+    patch.push('\n');
+    for line in hunk_body { patch.push_str(line); patch.push('\n'); }
+    patch
+}
+
+/// M5D hunk mutation result: a fresh diff token for the affected side.
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitHunkResult {
+    pub diff_token: String,
+}
+
+/// Hunk mutation request: path + side + hunk identity + diff token. The
+/// frontend never sends patch text; the host re-reads the diff and
+/// rebuilds the patch server-side.
+#[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitHunkRequest {
+    pub path: String,
+    pub cached: bool,
+    pub hunk_id: String,
+    pub diff_token: String,
+}
+
+/// Re-read the current diff for one path and return the requested hunk.
+fn resolve_hunk_review(workspace: &Path, req: &GitHunkRequest) -> Result<(Vec<String>, String, Vec<String>), GitError> {
+    let rel = workspace_rel_for(workspace, &req.path)?;
+    contained_git_path(workspace, &rel)?;
+    let current = git_diff_file_at(workspace, &req.path, req.cached)?;
+    if current.too_large || current.binary {
+        return Err(GitError::new("HUNK_UNSUPPORTED", "hunk actions are not available for binary or oversized diffs"));
+    }
+    if !diff_is_textual_single_file(&current.diff, &req.path) {
+        return Err(GitError::new("HUNK_UNSUPPORTED", "the diff is not a single textual file"));
+    }
+    if current.diff_token != req.diff_token {
+        return Err(GitError::new("GIT_DIFF_STALE", "the diff changed; refresh and try again"));
+    }
+    let (hunks, header_block) = split_diff_hunks(&current.diff);
+    let (hunk_header, hunk_body) = match hunks.iter().find(|(_, _, id)| id == &req.hunk_id) {
+        Some((h, b, _)) => (h.clone(), b.clone()),
+        None => return Err(GitError::new("HUNK_NOT_FOUND", "the hunk no longer exists")),
+    };
+    Ok((header_block, hunk_header, hunk_body))
+}
+
+/// Apply one hunk patch via fixed git argv with stdin delivery.
+fn git_apply_hunk(workspace: &Path, patch: &str, cached: bool, reverse: bool) -> Result<(), GitError> {
+    let mut args: Vec<&str> = vec!["apply", "--recount"];
+    if cached { args.push("--cached"); }
+    if reverse { args.push("--reverse"); }
+    args.push("-");
+    let root = repo_root_for(workspace)?;
+    let mut child = Command::new("git")
+        .args(["-C", root.to_string_lossy().as_ref()])
+        .args(&args)
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .map_err(|_| GitError::git_not_found())?;
+    use std::io::Write;
+    child.stdin.as_mut().ok_or_else(|| GitError::new("GIT_OPERATION_FAILED", "git apply stdin unavailable"))?
+        .write_all(patch.as_bytes())
+        .map_err(|error| GitError::with_detail("GIT_OPERATION_FAILED", "failed to write the hunk patch", error.to_string()))?;
+    drop(child.stdin.take());
+    let output = child.wait_with_output().map_err(|error| GitError::with_detail("GIT_OPERATION_FAILED", "git apply failed", error.to_string()))?;
+    if !output.status.success() {
+        return Err(GitError::with_detail("HUNK_APPLY_FAILED", "the hunk could not be applied", String::from_utf8_lossy(&output.stderr).trim().chars().take(500).collect::<String>()));
+    }
+    Ok(())
+}
+
+/// M5D: stage one textual hunk of the worktree diff into the index.
+fn git_stage_hunk_at(workspace: &Path, req: &GitHunkRequest) -> Result<GitHunkResult, GitError> {
+    let (header_block, hunk_header, hunk_body) = resolve_hunk_review(workspace, req)?;
+    let patch = hunk_patch_text(&header_block, &hunk_header, &hunk_body);
+    git_apply_hunk(workspace, &patch, true, false)?;
+    let fresh = git_diff_file_at(workspace, &req.path, false)?;
+    Ok(GitHunkResult { diff_token: fresh.diff_token })
+}
+
+/// M5D: unstage one hunk of the staged diff (reverse the index patch).
+fn git_unstage_hunk_at(workspace: &Path, req: &GitHunkRequest) -> Result<GitHunkResult, GitError> {
+    let (header_block, hunk_header, hunk_body) = resolve_hunk_review(workspace, req)?;
+    let patch = hunk_patch_text(&header_block, &hunk_header, &hunk_body);
+    git_apply_hunk(workspace, &patch, true, true)?;
+    let fresh = git_diff_file_at(workspace, &req.path, true)?;
+    Ok(GitHunkResult { diff_token: fresh.diff_token })
+}
+
+/// M5D: discard one hunk of the worktree diff (reverse into the worktree).
+fn git_discard_hunk_at(workspace: &Path, req: &GitHunkRequest) -> Result<GitHunkResult, GitError> {
+    let (header_block, hunk_header, hunk_body) = resolve_hunk_review(workspace, req)?;
+    let patch = hunk_patch_text(&header_block, &hunk_header, &hunk_body);
+    git_apply_hunk(workspace, &patch, false, true)?;
+    let fresh = git_diff_file_at(workspace, &req.path, false)?;
+    Ok(GitHunkResult { diff_token: fresh.diff_token })
+}
+
+#[tauri::command]
+pub fn git_stage_hunk(app: tauri::AppHandle, req: GitHunkRequest) -> Result<GitHunkResult, GitError> {
+    let root = workspace_root(&app).map_err(GitError::workspace)?;
+    git_stage_hunk_at(&root, &req)
+}
+
+#[tauri::command]
+pub fn git_unstage_hunk(app: tauri::AppHandle, req: GitHunkRequest) -> Result<GitHunkResult, GitError> {
+    let root = workspace_root(&app).map_err(GitError::workspace)?;
+    git_unstage_hunk_at(&root, &req)
+}
+
+#[tauri::command]
+pub fn git_discard_hunk(app: tauri::AppHandle, req: GitHunkRequest) -> Result<GitHunkResult, GitError> {
+    let root = workspace_root(&app).map_err(GitError::workspace)?;
+    git_discard_hunk_at(&root, &req)
+}
 
 /// Git status body over an explicit root for tests.
 fn git_status_at(root: &Path) -> Result<Value, String> {
@@ -1398,6 +1591,256 @@ mod tests {
         assert_eq!(files[0]["status"], ".M");
     }
 
+    #[test]
+    fn hunk_stage_unstage_discard_middle_of_three() {
+        let root = fixture_root("m5d-hunks");
+        let git = |args: &[&str]| {
+            Command::new("git").current_dir(&root).args(args).output().expect("git available")
+        };
+        assert!(git(&["init", "-q", "-b", "main"]).status.success());
+        assert!(git(&["config", "user.email", "m5d@example.test"]).status.success());
+        assert!(git(&["config", "user.name", "M5D Test"]).status.success());
+        let mut lines = String::new();
+        for i in 1..=60 { lines.push_str(&format!("l{i}\n")); }
+        fs::write(root.join("f.txt"), lines).unwrap();
+        assert!(git(&["add", "f.txt"]).status.success());
+        assert!(git(&["commit", "-q", "-m", "initial"]).status.success());
+        edit_three_hunks(&root);
+
+        // stage the middle hunk of three
+        let unstaged = git_diff_file_at(&root, "f.txt", false).unwrap();
+        let (hunks, _) = split_diff_hunks(&unstaged.diff);
+        assert_eq!(hunks.len(), 3);
+        let middle = hunks[1].2.clone();
+        let req = GitHunkRequest { path: "f.txt".into(), cached: false, hunk_id: middle.clone(), diff_token: unstaged.diff_token };
+        git_stage_hunk_at(&root, &req).unwrap();
+        let staged = git_diff_file_at(&root, "f.txt", true).unwrap();
+        assert_eq!(split_diff_hunks(&staged.diff).0.len(), 1);
+        let unstaged = git_diff_file_at(&root, "f.txt", false).unwrap();
+        assert_eq!(split_diff_hunks(&unstaged.diff).0.len(), 2);
+
+        // unstage the middle hunk back
+        let req = GitHunkRequest { path: "f.txt".into(), cached: true, hunk_id: middle, diff_token: staged.diff_token };
+        git_unstage_hunk_at(&root, &req).unwrap();
+        let unstaged = git_diff_file_at(&root, "f.txt", false).unwrap();
+        assert_eq!(split_diff_hunks(&unstaged.diff).0.len(), 3);
+
+        // discard the first hunk
+        let (hunks, _) = split_diff_hunks(&unstaged.diff);
+        let req = GitHunkRequest { path: "f.txt".into(), cached: false, hunk_id: hunks[0].2.clone(), diff_token: unstaged.diff_token };
+        git_discard_hunk_at(&root, &req).unwrap();
+        let unstaged = git_diff_file_at(&root, "f.txt", false).unwrap();
+        assert_eq!(split_diff_hunks(&unstaged.diff).0.len(), 2);
+    }
+
+    #[test]
+    fn hunk_stale_token_and_missing_hunk_fail_typed() {
+        let root = fixture_root("h5d-stale");
+        let git = |args: &[&str]| {
+            Command::new("git").current_dir(&root).args(args).output().expect("git available")
+        };
+        assert!(git(&["init", "-q", "-b", "main"]).status.success());
+        assert!(git(&["config", "user.email", "m5d@example.test"]).status.success());
+        assert!(git(&["config", "user.name", "M5D Test"]).status.success());
+        let mut lines = String::new();
+        for i in 1..=60 { lines.push_str(&format!("l{i}\n")); }
+        fs::write(root.join("f.txt"), lines).unwrap();
+        assert!(git(&["add", "f.txt"]).status.success());
+        assert!(git(&["commit", "-q", "-m", "initial"]).status.success());
+        edit_three_hunks(&root);
+        let unstaged = git_diff_file_at(&root, "f.txt", false).unwrap();
+        let (hunks, _) = split_diff_hunks(&unstaged.diff);
+
+        let stale = GitHunkRequest {
+            path: "f.txt".into(),
+            cached: false,
+            hunk_id: hunks[0].2.clone(),
+            diff_token: "deadbeefdeadbeef".into(),
+        };
+        let error = git_stage_hunk_at(&root, &stale).unwrap_err();
+        assert_eq!(error.code, "GIT_DIFF_STALE");
+
+        let missing = GitHunkRequest {
+            path: "f.txt".into(),
+            cached: false,
+            hunk_id: "does-not-exist".into(),
+            diff_token: unstaged.diff_token,
+        };
+        let error = git_stage_hunk_at(&root, &missing).unwrap_err();
+        assert_eq!(error.code, "HUNK_NOT_FOUND");
+    }
+
+    #[test]
+    fn hunk_rejects_binary_and_untracked_and_non_textual() {
+        let root = fixture_root("h5d-unsupported");
+        let git = |args: &[&str]| {
+            Command::new("git").current_dir(&root).args(args).output().expect("git available")
+        };
+        assert!(git(&["init", "-q", "-b", "main"]).status.success());
+        assert!(git(&["config", "user.email", "m5d@example.test"]).status.success());
+        assert!(git(&["config", "user.name", "M5D Test"]).status.success());
+        fs::write(root.join("bin.dat"), [0u8, 1, 2, 3]).unwrap();
+        assert!(git(&["add", "bin.dat"]).status.success());
+        assert!(git(&["commit", "-q", "-m", "initial"]).status.success());
+        fs::write(root.join("bin.dat"), [0u8, 9, 8, 7]).unwrap();
+        let diff = git_diff_file_at(&root, "bin.dat", false).unwrap();
+        assert!(diff.binary);
+        let req = GitHunkRequest {
+            path: "bin.dat".into(),
+            cached: false,
+            hunk_id: "whatever".into(),
+            diff_token: diff.diff_token,
+        };
+        let error = git_stage_hunk_at(&root, &req).unwrap_err();
+        assert_eq!(error.code, "HUNK_UNSUPPORTED");
+
+        // untracked file: no index diff at all
+        fs::write(root.join("new.txt"), "fresh").unwrap();
+        let req = GitHunkRequest {
+            path: "new.txt".into(),
+            cached: false,
+            hunk_id: "whatever".into(),
+            diff_token: "0000000000000000".into(),
+        };
+        let error = git_stage_hunk_at(&root, &req).unwrap_err();
+        assert_eq!(error.code, "HUNK_UNSUPPORTED");
+    }
+
+    #[test]
+    fn hunk_supports_weird_filenames_with_spaces() {
+        let root = fixture_root("h5d-weird");
+        let git = |args: &[&str]| {
+            Command::new("git").current_dir(&root).args(args).output().expect("git available")
+        };
+        assert!(git(&["init", "-q", "-b", "main"]).status.success());
+        assert!(git(&["config", "user.email", "m5d@example.test"]).status.success());
+        assert!(git(&["config", "user.name", "M5D Test"]).status.success());
+        let mut lines = String::new();
+        for i in 1..=60 { lines.push_str(&format!("l{i}\n")); }
+        fs::write(root.join("with space.txt"), lines).unwrap();
+        assert!(git(&["add", "--", "with space.txt"]).status.success());
+        assert!(git(&["commit", "-q", "-m", "initial"]).status.success());
+        edit_three_hunks_named(&root, "with space.txt");
+        let unstaged = git_diff_file_at(&root, "with space.txt", false).unwrap();
+        let (hunks, _) = split_diff_hunks(&unstaged.diff);
+        assert_eq!(hunks.len(), 3);
+        let req = GitHunkRequest {
+            path: "with space.txt".into(),
+            cached: false,
+            hunk_id: hunks[1].2.clone(),
+            diff_token: unstaged.diff_token,
+        };
+        git_stage_hunk_at(&root, &req).unwrap();
+        let staged = git_diff_file_at(&root, "with space.txt", true).unwrap();
+        assert_eq!(split_diff_hunks(&staged.diff).0.len(), 1);
+    }
+
+    #[test]
+    fn hunk_same_file_staged_and_unstaged_stay_semantically_separate() {
+        let root = fixture_root("m5d-same-file");
+        let git = |args: &[&str]| {
+            Command::new("git").current_dir(&root).args(args).output().expect("git available")
+        };
+        assert!(git(&["init", "-q", "-b", "main"]).status.success());
+        assert!(git(&["config", "user.email", "m5d@example.test"]).status.success());
+        assert!(git(&["config", "user.name", "M5D Test"]).status.success());
+        let mut lines = String::new();
+        for i in 1..=60 { lines.push_str(&format!("l{i}\n")); }
+        fs::write(root.join("f.txt"), lines).unwrap();
+        assert!(git(&["add", "f.txt"]).status.success());
+        assert!(git(&["commit", "-q", "-m", "initial"]).status.success());
+        edit_three_hunks(&root);
+
+        // Stage middle, then edit a fourth location: MM state with both sides.
+        let unstaged = git_diff_file_at(&root, "f.txt", false).unwrap();
+        let (hunks, _) = split_diff_hunks(&unstaged.diff);
+        let req = GitHunkRequest { path: "f.txt".into(), cached: false, hunk_id: hunks[1].2.clone(), diff_token: unstaged.diff_token };
+        git_stage_hunk_at(&root, &req).unwrap();
+        let path = root.join("f.txt");
+        let text = fs::read_to_string(&path).unwrap();
+        let mut edited: Vec<String> = text.lines().map(str::to_string).collect();
+        edited[44] = "EXTRA45".into();
+        fs::write(&path, edited.join("\n") + "\n").unwrap();
+
+        let staged = git_diff_file_at(&root, "f.txt", true).unwrap();
+        let unstaged = git_diff_file_at(&root, "f.txt", false).unwrap();
+        assert_eq!(split_diff_hunks(&staged.diff).0.len(), 1);
+        assert_eq!(split_diff_hunks(&unstaged.diff).0.len(), 3);
+
+        // Discard one unstaged hunk: staged side must remain untouched.
+        let (uhunks, _) = split_diff_hunks(&unstaged.diff);
+        let req = GitHunkRequest { path: "f.txt".into(), cached: false, hunk_id: uhunks[0].2.clone(), diff_token: unstaged.diff_token };
+        git_discard_hunk_at(&root, &req).unwrap();
+        let staged = git_diff_file_at(&root, "f.txt", true).unwrap();
+        assert_eq!(split_diff_hunks(&staged.diff).0.len(), 1);
+    }
+    #[test]
+    fn hunk_supports_unicode_filenames() {
+        let root = fixture_root("m5d-unicode");
+        let git = |args: &[&str]| {
+            Command::new("git").current_dir(&root).args(args).output().expect("git available")
+        };
+        assert!(git(&["init", "-q", "-b", "main"]).status.success());
+        assert!(git(&["config", "user.email", "m5d@example.test"]).status.success());
+        assert!(git(&["config", "user.name", "M5D Test"]).status.success());
+        let mut lines = String::new();
+        for i in 1..=60 { lines.push_str(&format!("l{i}\n")); }
+        fs::write(root.join("uni-èà.txt"), lines).unwrap();
+        assert!(git(&["add", "--", "uni-èà.txt"]).status.success());
+        assert!(git(&["commit", "-q", "-m", "initial"]).status.success());
+        edit_three_hunks_named(&root, "uni-èà.txt");
+        let unstaged = git_diff_file_at(&root, "uni-èà.txt", false).unwrap();
+        let (hunks, _) = split_diff_hunks(&unstaged.diff);
+        assert_eq!(hunks.len(), 3);
+        let req = GitHunkRequest {
+            path: "uni-èà.txt".into(),
+            cached: false,
+            hunk_id: hunks[1].2.clone(),
+            diff_token: unstaged.diff_token,
+        };
+        git_stage_hunk_at(&root, &req).unwrap();
+        let staged = git_diff_file_at(&root, "uni-èà.txt", true).unwrap();
+        assert_eq!(split_diff_hunks(&staged.diff).0.len(), 1);
+    }
+    #[test]
+    fn hunk_works_with_repo_root_above_workspace_subdir() {
+        let root = fixture_root("m5d-subdir");
+        let git = |args: &[&str]| {
+            Command::new("git").current_dir(&root).args(args).output().expect("git available")
+        };
+        assert!(git(&["init", "-q", "-b", "main"]).status.success());
+        assert!(git(&["config", "user.email", "m5d@example.test"]).status.success());
+        assert!(git(&["config", "user.name", "M5D Test"]).status.success());
+        fs::create_dir_all(root.join("sub")).unwrap();
+        let mut lines = String::new();
+        for i in 1..=60 { lines.push_str(&format!("l{i}\n")); }
+        fs::write(root.join("sub/a.txt"), lines).unwrap();
+        assert!(git(&["add", "sub/a.txt"]).status.success());
+        assert!(git(&["commit", "-q", "-m", "initial"]).status.success());
+        edit_three_hunks_named(&root.join("sub"), "a.txt");
+
+        let workspace = root.join("sub");
+        let unstaged = git_diff_file_at(&workspace, "sub/a.txt", false).unwrap();
+        let (hunks, _) = split_diff_hunks(&unstaged.diff);
+        assert_eq!(hunks.len(), 3);
+        let req = GitHunkRequest { path: "sub/a.txt".into(), cached: false, hunk_id: hunks[1].2.clone(), diff_token: unstaged.diff_token };
+        git_stage_hunk_at(&workspace, &req).unwrap();
+        let staged = git_diff_file_at(&workspace, "sub/a.txt", true).unwrap();
+        assert_eq!(split_diff_hunks(&staged.diff).0.len(), 1);
+    }
+    fn edit_three_hunks(root: &Path) {
+        edit_three_hunks_named(root, "f.txt");
+    }
+
+    fn edit_three_hunks_named(root: &Path, name: &str) {
+        let path = root.join(name);
+        let text = fs::read_to_string(&path).unwrap();
+        let mut lines: Vec<String> = text.lines().map(str::to_string).collect();
+        lines[4] = "CHANGED5".into();
+        lines[29] = "CHANGED30".into();
+        lines[54] = "CHANGED55".into();
+        fs::write(&path, lines.join("\n") + "\n").unwrap();
+    }
     fn v2_status_of(root: &Path) -> Vec<Value> {
         git_status_v2_at(root).unwrap()["files"].as_array().unwrap().clone()
     }

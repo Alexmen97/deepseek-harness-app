@@ -70,8 +70,11 @@ function fakeHost(): FakeHost {
     },
     gitUnstageFile: async (path) => { calls.push('unstage:' + path) },
     gitDiffFile: async (path) => {
-      return { diff: 'diff --git a/' + path + ' b/' + path + '\n', tooLarge: false, binary: false }
+      return { diff: 'diff --git a/' + path + ' b/' + path + '\n', tooLarge: false, binary: false, diffToken: '0000000000000000' }
     },
+    gitStageHunk: async (request) => { calls.push('stageHunk:' + request.path + ':' + request.hunkId + ':' + request.diffToken) },
+    gitUnstageHunk: async (request) => { calls.push('unstageHunk:' + request.path + ':' + request.hunkId + ':' + request.diffToken) },
+    gitDiscardHunk: async (request) => { calls.push('discardHunk:' + request.path + ':' + request.hunkId + ':' + request.diffToken) },
     gitDiscardFile: async (path) => {
       discardCalls += 1
       calls.push('discard:' + path)
@@ -233,7 +236,7 @@ describe('M5C.2 changes operations core', () => {
   it('invalidates a selected diff when a refreshed Git snapshot changes it', async () => {
     const host = fakeHost()
     let body = 'first snapshot'
-    host.gitDiffFile = async () => ({ diff: body, tooLarge: false, binary: false })
+    host.gitDiffFile = async () => ({ diff: body, tooLarge: false, binary: false, diffToken: '0000000000000000' })
     const core = createChangesCore(host)
     await core.refresh()
     core.select('a.txt', 'changes')
@@ -270,5 +273,37 @@ describe('M5C.2 changes operations core', () => {
     core.subscribe(() => { seen.push('change') })
     await core.stage('a.txt')
     expect(seen.length).toBeGreaterThan(0)
+  })
+})
+
+describe('M5D hunk operations', () => {
+  it('routes stage/unstage/discard hunk to the host with identity and token', async () => {
+    const host = fakeHost()
+    const core = createChangesCore(host)
+    await core.stageHunk('a.txt', 'hunk1', 'tok1')
+    await core.unstageHunk('a.txt', 'hunk2', 'tok2')
+    await core.discardHunk('a.txt', 'hunk3', 'tok3')
+    expect(host.calls).toContain('stageHunk:a.txt:hunk1:tok1')
+    expect(host.calls).toContain('unstageHunk:a.txt:hunk2:tok2')
+    expect(host.calls).toContain('discardHunk:a.txt:hunk3:tok3')
+  })
+
+  it('blocks discard hunk while the editor buffer is dirty', async () => {
+    const host = fakeHost()
+    const core = createChangesCore(host, { isDirty: () => true })
+    await core.discardHunk('a.txt', 'h1', 't1')
+    expect(core.getOps().errorsHunks['a.txt::h1']?.code).toBe('DIRTY_EDITOR_BLOCK')
+  })
+
+  it('tracks pending and clears it after the host settles', async () => {
+    const host = fakeHost()
+    const core = createChangesCore(host)
+    const done = host.holdNextStage()
+    const pending: Promise<void> = core.stageHunk('a.txt', 'h1', 'tok')
+    await Promise.resolve()
+    expect(core.getOps().pendingHunks['a.txt::h1']).toBe('staging')
+    done()
+    await pending
+    expect(core.getOps().pendingHunks['a.txt::h1']).toBeUndefined()
   })
 })

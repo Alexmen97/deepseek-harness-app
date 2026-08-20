@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { DesktopGitStatusV2 } from '@deepseek-ai/dsh-desktop-client'
 import { actionsFor, diffNavigationPaths, discardBlockedReason, hasStagedSide, isDiscardEligible, sortChanges, splitGitStatus, stageDirtyWarning, toWorkspacePath } from '../src/inspector/git-model.ts'
+import { hunkActionsFor } from '../src/inspector/git-model.ts'
 
 const STATUS: DesktopGitStatusV2 = {
   repository: true,
@@ -151,5 +152,19 @@ describe('M5C git status model', () => {
     expect(stageDirtyWarning(inside, new Set(['app.ts']))).toBe(true)
     expect(stageDirtyWarning(inside, new Set(['other.ts']))).toBe(false)
     expect(stageDirtyWarning(outside, new Set([]))).toBe(false)
+  })
+
+  it('offers hunk actions only for eligible tracked textual rows', () => {
+    const mk = (status: string, extra: Partial<{ conflicted: boolean; insideWorkspace: boolean }> = {}) => ({ path: 'p.txt', status, conflicted: false, insideWorkspace: true, ...extra })
+    expect(hunkActionsFor(mk('.M'), 'unstaged')).toEqual(['stage', 'discard'])
+    expect(hunkActionsFor(mk('MM'), 'unstaged')).toEqual(['stage', 'discard'])
+    expect(hunkActionsFor(mk('MM'), 'staged')).toEqual(['unstage'])
+    expect(hunkActionsFor(mk('A.'), 'staged')).toEqual([])
+    expect(hunkActionsFor(mk('.D'), 'unstaged')).toEqual([])
+    expect(hunkActionsFor(mk('??'), 'unstaged')).toEqual([])
+    expect(hunkActionsFor(mk('R.'), 'staged')).toEqual([])
+    expect(hunkActionsFor(mk('C.'), 'staged')).toEqual([])
+    expect(hunkActionsFor(mk('UU', { conflicted: true }), 'unstaged')).toEqual([])
+    expect(hunkActionsFor(mk('.M', { insideWorkspace: false }), 'unstaged')).toEqual([])
   })
 })

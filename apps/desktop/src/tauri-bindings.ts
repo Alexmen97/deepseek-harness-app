@@ -142,6 +142,27 @@ export function installTauriBindings(): void {
           throw parseGitError(error)
         }
       },
+      gitStageHunk: async (request) => {
+        try {
+          return await invoke('git_stage_hunk', { req: request })
+        } catch (error) {
+          throw parseGitError(error)
+        }
+      },
+      gitUnstageHunk: async (request) => {
+        try {
+          return await invoke('git_unstage_hunk', { req: request })
+        } catch (error) {
+          throw parseGitError(error)
+        }
+      },
+      gitDiscardHunk: async (request) => {
+        try {
+          return await invoke('git_discard_hunk', { req: request })
+        } catch (error) {
+          throw parseGitError(error)
+        }
+      },
       openLogs: async () => invoke('open_logs'),
       openExternal: async url => invoke('open_external', { url }),
       prefsGet: async key => invoke<string | undefined>('prefs_get', { key }),

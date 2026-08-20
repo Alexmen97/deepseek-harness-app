@@ -9,6 +9,8 @@ export interface DiffLine {
   oldLine?: number
   /** New-side (index/worktree) line number; undefined for deletions and metadata. */
   newLine?: number
+  /** The raw unified-diff line (with its leading +/-/space marker). */
+  raw: string
 }
 
 export interface DiffHunk {
@@ -18,6 +20,8 @@ export interface DiffHunk {
   oldStart: number
   /** New-side start line parsed from the hunk header. */
   newStart: number
+  /** FNV-1a identity of header + raw body, matching the Rust host. */
+  hunkId: string
 }
 
 export interface DiffFile {
@@ -41,6 +45,20 @@ export function parseHunkHeader(header: string): { oldStart: number; newStart: n
   return { oldStart: Number(match[1]), newStart: Number(match[2]) }
 }
 
+/** FNV-1a 64-bit hash rendered as a 16-hex token; the Rust host uses the
+ * same algorithm for diff tokens and hunk identities (M5D). */
+export function fnv1a(text: string): string {
+  const OFFSET = 0xcbf29ce484222325n
+  const PRIME = 0x100000001b3n
+  const MASK = 0xffffffffffffffffn
+  let hash = OFFSET
+  for (const byte of new TextEncoder().encode(text)) {
+    hash ^= BigInt(byte)
+    hash = (hash * PRIME) & MASK
+  }
+  return hash.toString(16).padStart(16, '0')
+}
+
 /** Parse one git unified diff into files, hunks, and +/- counts. */
 export function parseDiff(text: string): ParsedDiff {
   const files: DiffFile[] = []
@@ -48,9 +66,9 @@ export function parseDiff(text: string): ParsedDiff {
   let hunk: DiffHunk | undefined
   let oldLine = 0
   let newLine = 0
-  const pushLine = (kind: DiffLineKind, text: string): void => {
+  const pushLine = (kind: DiffLineKind, text: string, raw: string): void => {
     if (hunk === undefined) return
-    const line: DiffLine = { kind, text }
+    const line: DiffLine = { kind, text, raw }
     if (kind === 'context') {
       line.oldLine = oldLine
       line.newLine = newLine
@@ -75,8 +93,9 @@ export function parseDiff(text: string): ParsedDiff {
     }
     if (line.startsWith('@@')) {
       if (current === undefined) continue
+      if (hunk !== undefined) hunk.hunkId = fnv1a(hunk.header + '\n' + hunk.lines.map(l => l.raw).join('\n'))
       const ranges = parseHunkHeader(line)
-      hunk = { header: line, lines: [], oldStart: ranges.oldStart, newStart: ranges.newStart }
+      hunk = { header: line, lines: [], oldStart: ranges.oldStart, newStart: ranges.newStart, hunkId: '' }
       oldLine = ranges.oldStart
       newLine = ranges.newStart
       current.hunks.push(hunk)
@@ -88,14 +107,15 @@ export function parseDiff(text: string): ParsedDiff {
     }
     if (line.startsWith('+') && !line.startsWith('+++')) {
       current.added += 1
-      pushLine('add', line.slice(1))
+      pushLine('add', line.slice(1), line)
     } else if (line.startsWith('-') && !line.startsWith('---')) {
       current.removed += 1
-      pushLine('del', line.slice(1))
+      pushLine('del', line.slice(1), line)
     } else if (hunk !== undefined) {
-      pushLine('context', line.startsWith(' ') ? line.slice(1) : line)
+      pushLine('context', line.startsWith(' ') ? line.slice(1) : line, line)
     }
   }
+  if (hunk !== undefined) hunk.hunkId = fnv1a(hunk.header + '\n' + hunk.lines.map(l => l.raw).join('\n'))
   const added = files.reduce((sum, file) => sum + file.added, 0)
   const removed = files.reduce((sum, file) => sum + file.removed, 0)
   return { files, added, removed }
