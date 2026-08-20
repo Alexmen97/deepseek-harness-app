@@ -80,6 +80,7 @@ export function makeStubFs(initial: Record<string, string> = {}): {
 export function stubApiProxy(overrides: {
   sessions?: Partial<ApiProxy['sessions']>
   workspace?: Partial<ApiProxy['workspace']>
+  credentials?: Partial<ApiProxy['credentials']>
   llm?: Partial<ApiProxy['llm']>
   respond?: ApiProxy['respond']
   mux?: ApiProxy['events']['mux']
@@ -105,7 +106,7 @@ export function stubApiProxy(overrides: {
     },
     goals: domain() as unknown as ApiProxy['goals'],
     settings: domain() as unknown as ApiProxy['settings'],
-    credentials: domain() as unknown as ApiProxy['credentials'],
+    credentials: { ...domain(), ...overrides.credentials } as ApiProxy['credentials'],
     llm: { ...domain(), ...overrides.llm } as ApiProxy['llm'],
     downloads: domain() as unknown as ApiProxy['downloads'],
     respond: overrides.respond ?? (async () => ({ accepted: false, reason: 'not-pending' })),

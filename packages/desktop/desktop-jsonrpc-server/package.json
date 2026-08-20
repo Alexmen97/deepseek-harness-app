@@ -1,6 +1,6 @@
 {
   "name": "@deepseek-ai/dsh-desktop-jsonrpc-server",
-  "description": "Desktop runtime JSON-RPC server plugin: serves the desktop protocol over newline-delimited stdio, carrying the web API proxy surface (sessions, workspaces, models, respond) and the mux/host event streams",
+  "description": "Desktop runtime JSON-RPC server plugin: serves the desktop protocol over newline-delimited stdio, carrying its served API proxy methods and the mux/host event streams",
   "version": "0.1.0-rc.7",
   "publishConfig": {
     "access": "public"

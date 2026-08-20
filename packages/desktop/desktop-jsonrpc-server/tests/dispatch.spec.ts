@@ -26,6 +26,40 @@ describe('served route dispatch', () => {
     expect(line.result).toMatchObject({ rpcId: 'r1', result: { ok: true, value: { items: [] } } })
   })
 
+  it('routes standard credential methods through the ApiProxy', async () => {
+    const describe = vi.fn(async (request: { rpcId: unknown; payload: unknown }) => ({
+      rpcId: request.rpcId,
+      result: { ok: true as const, value: { credentials: { DEEPSEEK_API_KEY: { configured: false, writable: true } } } },
+    }))
+    const set = vi.fn(async (request: { rpcId: unknown; payload: unknown }) => ({
+      rpcId: request.rpcId,
+      result: { ok: true as const, value: {} },
+    }))
+    const unset = vi.fn(async (request: { rpcId: unknown; payload: unknown }) => ({
+      rpcId: request.rpcId,
+      result: { ok: true as const, value: {} },
+    }))
+    harness = await makeServerHarness({ api: stubApiProxy({ credentials: { describe, set, unset } as never }) })
+    await initializeHarness(harness)
+
+    harness.request('credentials.describe', { rpcId: 'describe', payload: { refs: ['DEEPSEEK_API_KEY'] } })
+    expect((await harness.waitResponse('req-1')).result).toMatchObject({
+      rpcId: 'describe',
+      result: { ok: true, value: { credentials: { DEEPSEEK_API_KEY: { configured: false, writable: true } } } },
+    })
+    expect(describe).toHaveBeenCalledWith(expect.objectContaining({ payload: { refs: ['DEEPSEEK_API_KEY'] } }))
+
+    harness.request('credentials.set', { rpcId: 'set', payload: { ref: 'DEEPSEEK_API_KEY', value: 'test-write-only-value' } }, 'set-request')
+    expect((await harness.waitResponse('set-request')).result).toMatchObject({ rpcId: 'set', result: { ok: true, value: {} } })
+    expect(set).toHaveBeenCalledWith(expect.objectContaining({
+      payload: { ref: 'DEEPSEEK_API_KEY', value: 'test-write-only-value' },
+    }))
+
+    harness.request('credentials.unset', { rpcId: 'unset', payload: { ref: 'DEEPSEEK_API_KEY' } }, 'unset-request')
+    expect((await harness.waitResponse('unset-request')).result).toMatchObject({ rpcId: 'unset', result: { ok: true, value: {} } })
+    expect(unset).toHaveBeenCalledWith(expect.objectContaining({ payload: { ref: 'DEEPSEEK_API_KEY' } }))
+  })
+
   it('refuses to serve apiproxy methods before initialize', async () => {
     harness = await makeServerHarness()
     harness.request('session.list', { rpcId: 'r1', payload: {} })

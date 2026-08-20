@@ -72,6 +72,11 @@ import {
   settingsReplaceRequestSchema,
   settingsUpdateRequestSchema,
 } from '@deepseek-ai/dsh-host-apiproxy/api/settings.schema'
+import {
+  credentialsDescribeRequestSchema,
+  credentialsSetRequestSchema,
+  credentialsUnsetRequestSchema,
+} from '@deepseek-ai/dsh-host-apiproxy/api/credentials.schema'
 import * as LlmDeepSeek from '@deepseek-ai/dsh-llm-deepseek'
 import type {} from '@deepseek-ai/dsh-user-approval'
 import type {} from '@deepseek-ai/dsh-user-questions'
@@ -152,6 +157,9 @@ type ServedMethod =
   | 'settings.update'
   | 'settings.replace'
   | 'settings.mutate'
+  | 'credentials.describe'
+  | 'credentials.set'
+  | 'credentials.unset'
 
 /**
  * One served apiproxy route: the same payload schema the web fetch carrier
@@ -230,6 +238,18 @@ const SERVED_ROUTES: { [K in ServedMethod]: ServedRoute<K> } = {
   'settings.mutate': {
     schema: settingsMutateRequestSchema,
     invoke: (api, rpcId, payload) => api.settings.mutate({ rpcId, payload }),
+  },
+  'credentials.describe': {
+    schema: credentialsDescribeRequestSchema,
+    invoke: (api, rpcId, payload) => api.credentials.describe({ rpcId, payload }),
+  },
+  'credentials.set': {
+    schema: credentialsSetRequestSchema,
+    invoke: (api, rpcId, payload) => api.credentials.set({ rpcId, payload }),
+  },
+  'credentials.unset': {
+    schema: credentialsUnsetRequestSchema,
+    invoke: (api, rpcId, payload) => api.credentials.unset({ rpcId, payload }),
   },
 }
 
