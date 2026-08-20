@@ -13,6 +13,17 @@ describe('M5C.5 terminal PTY-leak guard', () => {
     expect(SRC).toContain("tRef.current('terminal.spawnError')")
   })
 
+  it('sends the line typed in xterm when Enter submits it', () => {
+    expect(SRC).toContain('const text = inputBufferRef.current')
+    expect(SRC).toContain('text, submit: true')
+    expect(SRC).not.toContain("text: '', submit: true")
+  })
+
+  it('keeps the xterm instance through inspector-state renders', () => {
+    expect(SRC).toContain('}, [appearance])')
+    expect(SRC).not.toContain('}, [palette, sessionId, spawned])')
+  })
+
   it('invalidates stale spawn chains so only the latest run spawns', () => {
     expect(SRC).toContain('spawnRunRef.current')
     expect(SRC).toContain('run !== spawnRunRef.current')

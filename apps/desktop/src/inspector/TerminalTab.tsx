@@ -1,4 +1,8 @@
-/** M4 integrated terminal: xterm.js frontend over the desktop terminal RPC. */
+/**
+ * M4 integrated terminal: xterm.js frontend over the desktop terminal RPC.
+ * The WebView renders typed text locally and sends the complete line only
+ * when Enter submits it to the PTY.
+ */
 
 import { useEffect, useRef, useState } from 'react'
 import type { ReactElement } from 'react'
@@ -15,7 +19,8 @@ interface SpawnedTerminal {
 
 export function TerminalTab(): ReactElement {
   const { t } = useDesktopStrings()
-  const palette = desktopPalette(useDesktopAppearance())
+  const appearance = useDesktopAppearance()
+  const palette = desktopPalette(appearance)
   const state = useInspectorState()
   // `t` is a fresh arrow per render; the spawn effect must not re-run on
   // every locale/state render or each re-run would kill+respawn the PTY and
@@ -27,6 +32,7 @@ export function TerminalTab(): ReactElement {
   const fitRef = useRef<FitAddon | undefined>(undefined)
   const sessionRef = useRef<string | undefined>(undefined)
   const spawnedRef = useRef<SpawnedTerminal | undefined>(undefined)
+  const inputBufferRef = useRef('')
   const [spawned, setSpawned] = useState<SpawnedTerminal | undefined>(undefined)
   const [error, setError] = useState<string | undefined>(undefined)
   const sessionId = state.activeSessionId
@@ -54,24 +60,31 @@ export function TerminalTab(): ReactElement {
       const currentTerminal = spawnedRef.current
       if (currentSession === undefined || currentTerminal === undefined) return
       if (data === '\r' || data === '\n') {
+        const text = inputBufferRef.current
+        inputBufferRef.current = ''
         term.write('\r\n')
-        void terminalRequest('desktop.terminal.send', { sessionId: currentSession, terminalId: currentTerminal.terminalId, text: '', submit: true }).catch(() => {})
+        void terminalRequest('desktop.terminal.send', { sessionId: currentSession, terminalId: currentTerminal.terminalId, text, submit: true }).catch(() => {})
         return
       }
       if (data === '\x03') {
+        inputBufferRef.current = ''
         term.write('^C')
         void terminalRequest('desktop.terminal.signal', { sessionId: currentSession, terminalId: currentTerminal.terminalId, signal: 'SIGINT' }).catch(() => {})
         return
       }
+      if (data === '\x7f') inputBufferRef.current = inputBufferRef.current.slice(0, -1)
+      else inputBufferRef.current += data
       term.write(data)
     })
     const onResize = (): void => {
       try {
         fit.fit()
-        if (sessionId !== undefined && spawned !== undefined) {
+        const currentSession = sessionRef.current
+        const currentTerminal = spawnedRef.current
+        if (currentSession !== undefined && currentTerminal !== undefined) {
           void terminalRequest('desktop.terminal.resize', {
-            sessionId,
-            terminalId: spawned.terminalId,
+            sessionId: currentSession,
+            terminalId: currentTerminal.terminalId,
             columns: term.cols,
             rows: term.rows,
           }).catch(() => {})
@@ -86,7 +99,7 @@ export function TerminalTab(): ReactElement {
       term.dispose()
       termRef.current = undefined
     }
-  }, [palette, sessionId, spawned])
+  }, [appearance])
 
   // Serialized PTY lifecycle: one in-flight kill+spawn chain per mount.
   // A concurrent re-run (sessionId flapping, remount) waits for the previous
@@ -109,6 +122,7 @@ export function TerminalTab(): ReactElement {
     }
     const run = ++spawnRunRef.current
     const disposed = { value: false }
+    inputBufferRef.current = ''
     setError(undefined)
     const previous = ownedTerminalRef.current
     ownedTerminalRef.current = undefined
@@ -155,6 +169,7 @@ export function TerminalTab(): ReactElement {
   const closeTerminal = (): void => {
     if (sessionId === undefined || spawned === undefined) return
     void terminalRequest('desktop.terminal.kill', { sessionId, terminalId: spawned.terminalId }).then(() => {
+      inputBufferRef.current = ''
       setSpawned(undefined)
       termRef.current?.clear()
     }).catch(() => {})
