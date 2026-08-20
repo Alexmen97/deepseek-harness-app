@@ -57,6 +57,19 @@ describe('M4 diff parsing', () => {
     expect(parseDiff(SAMPLE).files[0]?.hunks[0]?.hunkId).toBe(hunk?.hunkId)
   })
 
+  it('keeps the last hunk identity stable when the diff ends with a newline', () => {
+    // The host derives hunk identities with Rust str::lines(), which drops
+    // the trailing empty element after the final newline; the parser must
+    // not let that element become a phantom context line of the last hunk.
+    const withNewline = SAMPLE + '\n'
+    const parsed = parseDiff(withNewline)
+    const hunk = parsed.files[0]?.hunks[0]
+    expect(hunk?.hunkId).toMatch(/^[0-9a-f]{16}$/)
+    expect(parseDiff(SAMPLE).files[0]?.hunks[0]?.hunkId).toBe(hunk?.hunkId)
+    // A trailing empty line must not be part of the hunk body.
+    expect(hunk?.lines.map(line => line.raw)).toEqual([' context', '-removed line', '+added line', ' tail'])
+  })
+
   it('maps porcelain status pairs to user-facing categories', () => {
     expect(statusCategory('M ')).toBe('modified')
     expect(statusCategory('A ')).toBe('added')

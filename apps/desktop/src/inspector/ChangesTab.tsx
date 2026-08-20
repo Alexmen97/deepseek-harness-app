@@ -170,6 +170,15 @@ export function ChangesTab(): ReactElement {
                 {hunkActions.map(action => hunkActionButton(action, hunk.hunkId, hunkIndex * 10 + hunkActions.indexOf(action)))}
               </div>
             )}
+            {(() => {
+              const hunkError = ops.errorsHunks[selectedPath + '::' + hunk.hunkId]
+              if (hunkError === undefined) return null
+              return (
+                <div style={{ color: '#f85149', fontSize: 11, padding: '0 8px 2px 0', textAlign: 'right' }}>
+                  {errorText(t as (key: string) => string, hunkError)}
+                </div>
+              )
+            })()}
           </div>
         ))}
       </div>

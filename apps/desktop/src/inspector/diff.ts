@@ -83,7 +83,10 @@ export function parseDiff(text: string): ParsedDiff {
     }
     hunk.lines.push(line)
   }
-  for (const line of text.split('\n')) {
+  // Rust's str::lines() drops the trailing empty element produced by the
+  // diff's final newline; keep parsed bodies aligned with the host so hunk
+  // identities match for the last hunk of a diff (M5D).
+  for (const line of text.split('\n').filter((line, index, lines) => line !== '' || index !== lines.length - 1)) {
     if (line.startsWith('diff --git ')) {
       const path = line.split(' b/')[1] ?? ''
       current = { path, header: line, hunks: [], added: 0, removed: 0 }
